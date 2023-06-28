@@ -934,7 +934,8 @@ void rustls_root_cert_store_free(struct rustls_root_cert_store *store);
  * This copies the contents of the rustls_root_cert_store. It does not take
  * ownership of the pointed-to memory.
  */
-const struct rustls_client_cert_verifier *rustls_client_cert_verifier_new(const struct rustls_root_cert_store *store);
+rustls_result rustls_client_cert_verifier_new(const struct rustls_root_cert_store *store,
+                                              struct rustls_client_cert_verifier **verifier_out);
 
 /**
  * "Free" a verifier previously returned from
@@ -954,7 +955,8 @@ void rustls_client_cert_verifier_free(const struct rustls_client_cert_verifier *
  * This copies the contents of the rustls_root_cert_store. It does not take
  * ownership of the pointed-to data.
  */
-const struct rustls_client_cert_verifier_optional *rustls_client_cert_verifier_optional_new(const struct rustls_root_cert_store *store);
+rustls_result rustls_client_cert_verifier_optional_new(const struct rustls_root_cert_store *store,
+                                                       struct rustls_client_cert_verifier_optional **verifier_out);
 
 /**
  * "Free" a verifier previously returned from
