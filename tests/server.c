@@ -28,23 +28,7 @@
 #include "rustls.h"
 #include "common.h"
 
-enum demo_result
-read_file(const char *filename, char *buf, size_t buflen, size_t *n)
-{
-  FILE *f = fopen(filename, "r");
-  if(f == NULL) {
-    fprintf(stderr, "server: opening %s: %s\n", filename, strerror(errno));
-    return DEMO_ERROR;
-  }
-  *n = fread(buf, 1, buflen, f);
-  if(!feof(f)) {
-    fprintf(stderr, "server: reading %s: %s\n", filename, strerror(errno));
-    fclose(f);
-    return DEMO_ERROR;
-  }
-  fclose(f);
-  return DEMO_OK;
-}
+
 
 typedef enum exchange_state
 {
@@ -252,37 +236,6 @@ cleanup:
   free(conn);
 }
 
-const struct rustls_certified_key *
-load_cert_and_key(const char *certfile, const char *keyfile)
-{
-  char certbuf[10000];
-  size_t certbuf_len;
-  char keybuf[10000];
-  size_t keybuf_len;
-
-  int result = read_file(certfile, certbuf, sizeof(certbuf), &certbuf_len);
-  if(result != DEMO_OK) {
-    return NULL;
-  }
-
-  result = read_file(keyfile, keybuf, sizeof(keybuf), &keybuf_len);
-  if(result != DEMO_OK) {
-    return NULL;
-  }
-
-  const struct rustls_certified_key *certified_key;
-  result = rustls_certified_key_build((uint8_t *)certbuf,
-                                      certbuf_len,
-                                      (uint8_t *)keybuf,
-                                      keybuf_len,
-                                      &certified_key);
-  if(result != RUSTLS_RESULT_OK) {
-    print_error("server", "parsing certificate and key", result);
-    return NULL;
-  }
-  return certified_key;
-}
-
 bool shutting_down = false;
 
 void handle_signal(int signo) {
@@ -304,6 +257,8 @@ main(int argc, const char **argv)
   struct rustls_connection *rconn = NULL;
   const struct rustls_certified_key *certified_key = NULL;
   struct rustls_slice_bytes alpn_http11;
+  const struct rustls_client_cert_verifier *client_cert_verifier = NULL;
+  struct rustls_root_cert_store *client_cert_root_store = NULL;
 
   alpn_http11.data = (unsigned char*)"http/1.1";
   alpn_http11.len = 8;
@@ -325,7 +280,7 @@ main(int argc, const char **argv)
     goto cleanup;
   }
 
-  certified_key = load_cert_and_key(argv[1], argv[2]);
+  certified_key = load_cert_and_key(argv[0], argv[1], argv[2]);
   if(certified_key == NULL) {
     goto cleanup;
   }
@@ -333,6 +288,22 @@ main(int argc, const char **argv)
   rustls_server_config_builder_set_certified_keys(
     config_builder, &certified_key, 1);
   rustls_server_config_builder_set_alpn_protocols(config_builder, &alpn_http11, 1);
+
+  char* auth_cert = getenv("AUTH_CERT");
+  if(auth_cert) {
+    char certbuf[10000];
+    size_t certbuf_len;
+    int result = read_file(argv[0], auth_cert, certbuf, sizeof(certbuf), &certbuf_len);
+    if(result != DEMO_OK) {
+      goto cleanup;
+    }
+
+    client_cert_root_store = rustls_root_cert_store_new();
+    rustls_root_cert_store_add_pem(client_cert_root_store, (uint8_t *)certbuf, certbuf_len, true);
+
+    client_cert_verifier = rustls_client_cert_verifier_new(client_cert_root_store);
+    rustls_server_config_builder_set_client_verifier(config_builder, client_cert_verifier);
+  }
 
   server_config = rustls_server_config_builder_build(config_builder);
 
@@ -409,6 +380,8 @@ main(int argc, const char **argv)
 
 cleanup:
   rustls_certified_key_free(certified_key);
+  rustls_root_cert_store_free(client_cert_root_store);
+  rustls_client_cert_verifier_free(client_cert_verifier);
   rustls_server_config_free(server_config);
   rustls_connection_free(rconn);
   if(sockfd>0) {
