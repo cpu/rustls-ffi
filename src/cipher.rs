@@ -13,11 +13,11 @@ use rustls::{
 };
 use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 
-use crate::error::rustls_result;
+use crate::error::{map_error, rustls_result};
 use crate::rslice::{rustls_slice_bytes, rustls_str};
 use crate::{
     ffi_panic_boundary, try_box_from_ptr, try_mut_from_ptr, try_ref_from_ptr, try_slice,
-    ArcCastPtr, BoxCastPtr, CastConstPtr, CastPtr,
+    ArcCastPtr, BoxCastPtr, CastPtr,
 };
 use rustls_result::NullParameter;
 use std::ops::Deref;
@@ -517,11 +517,12 @@ pub struct rustls_client_cert_verifier {
     _private: [u8; 0],
 }
 
-impl CastConstPtr for rustls_client_cert_verifier {
+impl CastPtr for rustls_client_cert_verifier {
     type RustType = AllowAnyAuthenticatedClient;
 }
 
 impl ArcCastPtr for rustls_client_cert_verifier {}
+impl BoxCastPtr for rustls_client_cert_verifier {}
 
 impl rustls_client_cert_verifier {
     /// Create a new client certificate verifier for the root store. The verifier
@@ -533,11 +534,18 @@ impl rustls_client_cert_verifier {
     #[no_mangle]
     pub extern "C" fn rustls_client_cert_verifier_new(
         store: *const rustls_root_cert_store,
-    ) -> *const rustls_client_cert_verifier {
+        verifier_out: *mut *mut rustls_client_cert_verifier,
+    ) -> rustls_result {
         ffi_panic_boundary! {
             let store: &RootCertStore = try_ref_from_ptr!(store);
-            let client_cert_verifier = AllowAnyAuthenticatedClient::new(store.clone());
-            return Arc::into_raw(client_cert_verifier.boxed()) as *const _;
+            // TODO(@cpu): feed through CRLs.
+            match AllowAnyAuthenticatedClient::new(store.clone(), Vec::new()) {
+                Ok(client_cert_verifier) => {
+                    BoxCastPtr::set_mut_ptr(verifier_out, client_cert_verifier);
+                    rustls_result::Ok
+                },
+                Err(e) => map_error(e),
+            }
         }
     }
 
@@ -568,11 +576,12 @@ pub struct rustls_client_cert_verifier_optional {
     _private: [u8; 0],
 }
 
-impl CastConstPtr for rustls_client_cert_verifier_optional {
+impl CastPtr for rustls_client_cert_verifier_optional {
     type RustType = AllowAnyAnonymousOrAuthenticatedClient;
 }
 
 impl ArcCastPtr for rustls_client_cert_verifier_optional {}
+impl BoxCastPtr for rustls_client_cert_verifier_optional {}
 
 impl rustls_client_cert_verifier_optional {
     /// Create a new rustls_client_cert_verifier_optional for the root store. The
@@ -584,12 +593,18 @@ impl rustls_client_cert_verifier_optional {
     #[no_mangle]
     pub extern "C" fn rustls_client_cert_verifier_optional_new(
         store: *const rustls_root_cert_store,
-    ) -> *const rustls_client_cert_verifier_optional {
+        verifier_out: *mut *mut rustls_client_cert_verifier_optional,
+    ) -> rustls_result {
+        // TODO(@cpu): feed through CRLs.
         ffi_panic_boundary! {
             let store: &RootCertStore = try_ref_from_ptr!(store);
-            let client_cert_verifier = AllowAnyAnonymousOrAuthenticatedClient::new(store.clone());
-            return Arc::into_raw(client_cert_verifier.boxed())
-                as *const _;
+            match AllowAnyAnonymousOrAuthenticatedClient::new(store.clone(), Vec::new()) {
+                Ok(client_cert_verifier) => {
+                    BoxCastPtr::set_mut_ptr(verifier_out, client_cert_verifier);
+                    rustls_result::Ok
+                },
+                Err(e) => map_error(e),
+            }
         }
     }
 

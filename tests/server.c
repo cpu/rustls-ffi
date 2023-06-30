@@ -255,7 +255,7 @@ main(int argc, const char **argv)
   struct rustls_connection *rconn = NULL;
   const struct rustls_certified_key *certified_key = NULL;
   struct rustls_slice_bytes alpn_http11;
-  const struct rustls_client_cert_verifier *client_cert_verifier = NULL;
+  struct rustls_client_cert_verifier *client_cert_verifier = NULL;
   struct rustls_root_cert_store *client_cert_root_store = NULL;
 
   alpn_http11.data = (unsigned char*)"http/1.1";
@@ -299,7 +299,11 @@ main(int argc, const char **argv)
     client_cert_root_store = rustls_root_cert_store_new();
     rustls_root_cert_store_add_pem(client_cert_root_store, (uint8_t *)certbuf, certbuf_len, true);
 
-    client_cert_verifier = rustls_client_cert_verifier_new(client_cert_root_store);
+    result = rustls_client_cert_verifier_new(client_cert_root_store, &client_cert_verifier);
+    if(result != RUSTLS_RESULT_OK) {
+      printf("Bad result: %d\n", result);
+      goto cleanup;
+    }
     rustls_server_config_builder_set_client_verifier(config_builder, client_cert_verifier);
   }
 

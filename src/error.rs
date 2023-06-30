@@ -371,6 +371,8 @@ pub(crate) fn map_error(input: rustls::Error) -> rustls_result {
             alert::Unknown(_) => AlertUnknown,
             _ => AlertUnknown,
         },
+
+        // TODO(@cpu): map CRL errors.
         _ => General,
     }
 }
