@@ -5,7 +5,9 @@ use std::ptr::null;
 use std::slice;
 use std::sync::Arc;
 
-use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient};
+use rustls::server::{
+    AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, UnparsedCertRevocationList,
+};
 use rustls::sign::CertifiedKey;
 use rustls::{
     Certificate, PrivateKey, RootCertStore, SupportedCipherSuite, ALL_CIPHER_SUITES,
@@ -534,12 +536,20 @@ impl rustls_client_cert_verifier {
     #[no_mangle]
     pub extern "C" fn rustls_client_cert_verifier_new(
         store: *const rustls_root_cert_store,
+        crl_pem: *const u8, // TODO(@cpu): more than one crl, optional.
+        crl_pem_len: size_t,
         verifier_out: *mut *mut rustls_client_cert_verifier,
     ) -> rustls_result {
         ffi_panic_boundary! {
             let store: &RootCertStore = try_ref_from_ptr!(store);
-            // TODO(@cpu): feed through CRLs.
-            match AllowAnyAuthenticatedClient::new(store.clone(), Vec::new()) {
+            let crl_pem: &[u8] = try_slice!(crl_pem, crl_pem_len);
+            let crl_der = match rustls_pemfile::crls(&mut Cursor::new(crl_pem)) {
+                Ok(vv) =>
+                    vv.into_iter().map(UnparsedCertRevocationList).collect(),
+
+                Err(_) => return rustls_result::CertificateParseError, // TODO(@cpu): better err.
+            };
+            match AllowAnyAuthenticatedClient::new(store.clone(), crl_der) {
                 Ok(client_cert_verifier) => {
                     BoxCastPtr::set_mut_ptr(verifier_out, client_cert_verifier);
                     rustls_result::Ok
@@ -593,12 +603,18 @@ impl rustls_client_cert_verifier_optional {
     #[no_mangle]
     pub extern "C" fn rustls_client_cert_verifier_optional_new(
         store: *const rustls_root_cert_store,
+        crl_pem: *const u8, // TODO(@cpu): more than one crl, optional.
+        crl_pem_len: size_t,
         verifier_out: *mut *mut rustls_client_cert_verifier_optional,
     ) -> rustls_result {
-        // TODO(@cpu): feed through CRLs.
         ffi_panic_boundary! {
             let store: &RootCertStore = try_ref_from_ptr!(store);
-            match AllowAnyAnonymousOrAuthenticatedClient::new(store.clone(), Vec::new()) {
+            let crl_pem: &[u8] = try_slice!(crl_pem, crl_pem_len);
+            let crl_der = match rustls_pemfile::crls(&mut Cursor::new(crl_pem)) {
+                Ok(vv) => vv.into_iter().map(UnparsedCertRevocationList).collect(),
+                Err(_) => return rustls_result::CertificateParseError, // TODO(@cpu): better err.
+            };
+            match AllowAnyAnonymousOrAuthenticatedClient::new(store.clone(), crl_der) {
                 Ok(client_cert_verifier) => {
                     BoxCastPtr::set_mut_ptr(verifier_out, client_cert_verifier);
                     rustls_result::Ok

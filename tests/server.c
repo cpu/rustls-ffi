@@ -299,7 +299,17 @@ main(int argc, const char **argv)
     client_cert_root_store = rustls_root_cert_store_new();
     rustls_root_cert_store_add_pem(client_cert_root_store, (uint8_t *)certbuf, certbuf_len, true);
 
-    result = rustls_client_cert_verifier_new(client_cert_root_store, &client_cert_verifier);
+    char* auth_crl = getenv("AUTH_CRL");
+    char crlbuf[10000];
+    size_t crlbuf_len;
+    if(auth_crl) {
+      result = read_file(argv[0], auth_crl, crlbuf, sizeof(crlbuf), &crlbuf_len);
+      if(result != DEMO_OK) {
+        goto cleanup;
+      }
+    }
+
+    result = rustls_client_cert_verifier_new(client_cert_root_store, (uint8_t *) crlbuf, sizeof(certbuf), &client_cert_verifier);
     if(result != RUSTLS_RESULT_OK) {
       printf("Bad result: %d\n", result);
       goto cleanup;

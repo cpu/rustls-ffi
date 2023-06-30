@@ -26,7 +26,7 @@ read_buf = ["rustls/read_buf"]
 rustls = { version = "=0.21.2", features = [ "dangerous_configuration" ] }
 webpki = "0.22"
 libc = "0.2"
-rustls-pemfile = "0.2.1"
+rustls-pemfile = "1.0.3"
 log = "0.4.17"
 
 [lib]

@@ -948,6 +948,8 @@ void rustls_root_cert_store_free(struct rustls_root_cert_store *store);
  * ownership of the pointed-to memory.
  */
 rustls_result rustls_client_cert_verifier_new(const struct rustls_root_cert_store *store,
+                                              const uint8_t *crl_pem,
+                                              size_t crl_pem_len,
                                               struct rustls_client_cert_verifier **verifier_out);
 
 /**
@@ -969,6 +971,8 @@ void rustls_client_cert_verifier_free(const struct rustls_client_cert_verifier *
  * ownership of the pointed-to data.
  */
 rustls_result rustls_client_cert_verifier_optional_new(const struct rustls_root_cert_store *store,
+                                                       const uint8_t *crl_pem,
+                                                       size_t crl_pem_len,
                                                        struct rustls_client_cert_verifier_optional **verifier_out);
 
 /**
