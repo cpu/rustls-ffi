@@ -57,6 +57,7 @@ u32_enum_builder! {
         PlaintextEmpty => 7011,
         AcceptorNotReady => 7012,
         AlreadyUsed => 7013,
+        CertificateRevocationListParseError => 7014,
 
         // From https://docs.rs/rustls/latest/rustls/enum.Error.html
         NoCertificatesPresented => 7101,
@@ -435,6 +436,9 @@ impl Display for rustls_result {
                 f,
                 "tried to use a rustls struct after it had been converted to another struct"
             ),
+            CertificateRevocationListParseError => {
+                write!(f, "error parsing certificate revocation list (CRL)",)
+            }
 
             CertEncodingBad => Error::InvalidCertificate(CertificateError::BadEncoding).fmt(f),
             CertExpired => Error::InvalidCertificate(CertificateError::Expired).fmt(f),
@@ -584,6 +588,7 @@ impl Display for rustls_result {
             CertSCTTimestampInFuture => Error::InvalidSct(sct::TimestampInFuture).fmt(f),
             CertSCTUnsupportedVersion => Error::InvalidSct(sct::UnsupportedSctVersion).fmt(f),
             CertSCTUnknownLog => Error::InvalidSct(sct::UnknownLog).fmt(f),
+            // TODO(@cpu): handle the new upstream CRL specific errors here.
         }
     }
 }

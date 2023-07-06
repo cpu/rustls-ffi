@@ -5,13 +5,15 @@ use std::ptr::null;
 use std::slice;
 use std::sync::Arc;
 
-use rustls::server::{AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient};
+use rustls::server::{
+    AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, UnparsedCertRevocationList,
+};
 use rustls::sign::CertifiedKey;
 use rustls::{
     Certificate, PrivateKey, RootCertStore, SupportedCipherSuite, ALL_CIPHER_SUITES,
     DEFAULT_CIPHER_SUITES,
 };
-use rustls_pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
+use rustls_pemfile::{certs, crls, pkcs8_private_keys, rsa_private_keys};
 
 use crate::error::rustls_result;
 use crate::rslice::{rustls_slice_bytes, rustls_str};
@@ -517,11 +519,12 @@ pub struct rustls_client_cert_verifier {
     _private: [u8; 0],
 }
 
-impl CastConstPtr for rustls_client_cert_verifier {
+impl CastPtr for rustls_client_cert_verifier {
     type RustType = AllowAnyAuthenticatedClient;
 }
 
 impl ArcCastPtr for rustls_client_cert_verifier {}
+impl BoxCastPtr for rustls_client_cert_verifier {}
 
 impl rustls_client_cert_verifier {
     /// Create a new client certificate verifier for the root store. The verifier
@@ -530,14 +533,52 @@ impl rustls_client_cert_verifier {
     /// rustls_client_cert_verifier_free for details about lifetime.
     /// This copies the contents of the rustls_root_cert_store. It does not take
     /// ownership of the pointed-to memory.
+    // NOTE(@cpu): return type changed to *mut because we need to be able to pass the
+    //             results of this constructor, and the with_crls constructor to free and one of
+    //             those returns a mut pointer. Maybe there's a better way?
+    //             A union for the free arg?
     #[no_mangle]
     pub extern "C" fn rustls_client_cert_verifier_new(
         store: *const rustls_root_cert_store,
-    ) -> *const rustls_client_cert_verifier {
+    ) -> *mut rustls_client_cert_verifier {
         ffi_panic_boundary! {
             let store: &RootCertStore = try_ref_from_ptr!(store);
             let client_cert_verifier = AllowAnyAuthenticatedClient::new(store.clone());
-            return Arc::into_raw(client_cert_verifier.boxed()) as *const _;
+            return Arc::into_raw(client_cert_verifier.boxed()) as *mut _;
+        }
+    }
+
+    /// TODO(@cpu): write docstring..
+    // TODO(@cpu): some notes...:
+    //      * Need this to take a verifier_out *mut *mut because parsing CRLs can error, so we
+    //        have to use up the return type w/ a rustls_result.
+    //      * As written, only supports a single CRL. Need to think about how to express multiple
+    //        *const u8 with different size_t lengths...
+    //      * This isn't wrapping anything in an arc - I think what we want is an Arc<Box<_>> ?
+    #[no_mangle]
+    pub extern "C" fn rustls_client_cert_verifier_new_with_crls(
+        verifier_out: *mut *mut rustls_client_cert_verifier,
+        store: *const rustls_root_cert_store,
+        crl_pem: *const u8,
+        crl_pem_len: size_t, // TODO(@cpu): really want to support _multiple_ pem CRLs, K.I.S.S to get started.
+    ) -> rustls_result {
+        ffi_panic_boundary! {
+            let store: &RootCertStore = try_ref_from_ptr!(store);
+            let client_cert_verifier = AllowAnyAuthenticatedClient::new(store.clone());
+
+            let crl_pem: &[u8] = try_slice!(crl_pem, crl_pem_len);
+            let crls_der = match crls(&mut Cursor::new(crl_pem)) {
+                Ok(vv) => vv.into_iter().map(UnparsedCertRevocationList).collect::<Vec<UnparsedCertRevocationList>>(),
+                Err(_) => return rustls_result::CertificateRevocationListParseError,
+            };
+
+            let client_cert_verifier = match client_cert_verifier.with_crls(crls_der) {
+                Ok(v) => v,
+                Err(_) => return rustls_result::CertificateRevocationListParseError,
+            };
+
+            BoxCastPtr::set_mut_ptr(verifier_out, client_cert_verifier);
+            rustls_result::Ok
         }
     }
 
@@ -548,9 +589,7 @@ impl rustls_client_cert_verifier {
     /// consider this pointer unusable after "free"ing it.
     /// Calling with NULL is fine. Must not be called twice with the same value.
     #[no_mangle]
-    pub extern "C" fn rustls_client_cert_verifier_free(
-        verifier: *const rustls_client_cert_verifier,
-    ) {
+    pub extern "C" fn rustls_client_cert_verifier_free(verifier: *mut rustls_client_cert_verifier) {
         ffi_panic_boundary! {
             rustls_client_cert_verifier::free(verifier);
         }
@@ -592,6 +631,9 @@ impl rustls_client_cert_verifier_optional {
                 as *const _;
         }
     }
+
+    // TODO(@cpu): once the approach for the non-optional verifier is settled, implement matching
+    //             support here for building an optional verifier w/ CRLs.
 
     /// "Free" a verifier previously returned from
     /// rustls_client_cert_verifier_optional_new. Since rustls_client_cert_verifier_optional

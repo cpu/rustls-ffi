@@ -22,6 +22,7 @@ enum rustls_result {
   RUSTLS_RESULT_PLAINTEXT_EMPTY = 7011,
   RUSTLS_RESULT_ACCEPTOR_NOT_READY = 7012,
   RUSTLS_RESULT_ALREADY_USED = 7013,
+  RUSTLS_RESULT_CERTIFICATE_REVOCATION_LIST_PARSE_ERROR = 7014,
   RUSTLS_RESULT_NO_CERTIFICATES_PRESENTED = 7101,
   RUSTLS_RESULT_DECRYPT_ERROR = 7102,
   RUSTLS_RESULT_FAILED_TO_GET_CURRENT_TIME = 7103,
@@ -952,7 +953,15 @@ void rustls_root_cert_store_free(struct rustls_root_cert_store *store);
  * This copies the contents of the rustls_root_cert_store. It does not take
  * ownership of the pointed-to memory.
  */
-const struct rustls_client_cert_verifier *rustls_client_cert_verifier_new(const struct rustls_root_cert_store *store);
+struct rustls_client_cert_verifier *rustls_client_cert_verifier_new(const struct rustls_root_cert_store *store);
+
+/**
+ * TODO(@cpu): write docstring..
+ */
+rustls_result rustls_client_cert_verifier_new_with_crls(struct rustls_client_cert_verifier **verifier_out,
+                                                        const struct rustls_root_cert_store *store,
+                                                        const uint8_t *crl_pem,
+                                                        size_t crl_pem_len);
 
 /**
  * "Free" a verifier previously returned from
@@ -962,7 +971,7 @@ const struct rustls_client_cert_verifier *rustls_client_cert_verifier_new(const 
  * consider this pointer unusable after "free"ing it.
  * Calling with NULL is fine. Must not be called twice with the same value.
  */
-void rustls_client_cert_verifier_free(const struct rustls_client_cert_verifier *verifier);
+void rustls_client_cert_verifier_free(struct rustls_client_cert_verifier *verifier);
 
 /**
  * Create a new rustls_client_cert_verifier_optional for the root store. The
