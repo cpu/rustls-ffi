@@ -558,12 +558,7 @@ impl rustls_client_cert_verifier_builder {
         crl_pem_len: size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let client_cert_verifier_builder = match BoxCastPtr::to_box(verifier) {
-                None => {
-                    return NullParameter;
-                },
-                Some(x) => Box::leak(x), // nb. does not take ownership of the box.
-            };
+            let client_cert_verifier_builder: &mut Option<AllowAnyAuthenticatedClient> = try_mut_from_ptr!(verifier);
 
             let crl_pem: &[u8] = try_slice!(crl_pem, crl_pem_len);
             let crls_der = match crls(&mut Cursor::new(crl_pem)) {
@@ -627,12 +622,8 @@ impl rustls_client_cert_verifier {
         builder: *mut rustls_client_cert_verifier_builder,
     ) -> *const rustls_client_cert_verifier {
         ffi_panic_boundary! {
-            let mut client_cert_verifier_builder = match BoxCastPtr::to_box(builder) {
-                None => {
-                    return null() as *const _;
-                },
-                Some(x) => x,
-            };
+            let client_cert_verifier_builder: &mut Option<AllowAnyAuthenticatedClient> = try_mut_from_ptr!(builder);
+
             let client_cert_verifier = match client_cert_verifier_builder.take() {
                 None => {
                     return null() as *const _;
