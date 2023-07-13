@@ -517,12 +517,10 @@ pub struct rustls_client_cert_verifier_builder {
     _private: [u8; 0],
 }
 
-// XXX: contained value is consumed even on error, so this can contain None. but the caller
-// still needs to free it
-pub(crate) struct AllowAnyAuthenticatedClientHolder(Option<AllowAnyAuthenticatedClient>);
-
 impl CastPtr for rustls_client_cert_verifier_builder {
-    type RustType = AllowAnyAuthenticatedClientHolder;
+    // XXX: contained value is consumed even on error, so this can contain None. but the caller
+    // still needs to free it
+    type RustType = Option<AllowAnyAuthenticatedClient>;
 }
 
 impl BoxCastPtr for rustls_client_cert_verifier_builder {}
@@ -543,7 +541,7 @@ impl rustls_client_cert_verifier_builder {
     ) -> *mut rustls_client_cert_verifier_builder {
         ffi_panic_boundary! {
             let store: &RootCertStore = try_ref_from_ptr!(store);
-            let client_cert_verifier = AllowAnyAuthenticatedClientHolder(Some(AllowAnyAuthenticatedClient::new(store.clone())));
+            let client_cert_verifier = Some(AllowAnyAuthenticatedClient::new(store.clone()));
             BoxCastPtr::to_mut_ptr(client_cert_verifier)
         }
     }
@@ -560,7 +558,7 @@ impl rustls_client_cert_verifier_builder {
         crl_pem_len: size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let client_cert_verifier_holder = match BoxCastPtr::to_box(verifier) {
+            let client_cert_verifier_builder = match BoxCastPtr::to_box(verifier) {
                 None => {
                     return NullParameter;
                 },
@@ -573,7 +571,7 @@ impl rustls_client_cert_verifier_builder {
                 Err(_) => return rustls_result::CertificateRevocationListParseError,
             };
 
-            let client_cert_verifier = match client_cert_verifier_holder.0.take() {
+            let client_cert_verifier = match client_cert_verifier_builder.take() {
                 None => {
                     return NullParameter;
                 },
@@ -581,7 +579,7 @@ impl rustls_client_cert_verifier_builder {
             };
 
             match client_cert_verifier.with_crls(crls_der) {
-                Ok(v) => client_cert_verifier_holder.0.replace(v),
+                Ok(v) => client_cert_verifier_builder.replace(v),
                 Err(e) => return map_error(rustls::Error::InvalidCertRevocationList(e)),
             };
 
@@ -629,13 +627,13 @@ impl rustls_client_cert_verifier {
         builder: *mut rustls_client_cert_verifier_builder,
     ) -> *const rustls_client_cert_verifier {
         ffi_panic_boundary! {
-            let mut client_cert_verifier_holder = match BoxCastPtr::to_box(builder) {
+            let mut client_cert_verifier_builder = match BoxCastPtr::to_box(builder) {
                 None => {
                     return null() as *const _;
                 },
                 Some(x) => x,
             };
-            let client_cert_verifier = match client_cert_verifier_holder.0.take() {
+            let client_cert_verifier = match client_cert_verifier_builder.take() {
                 None => {
                     return null() as *const _;
                 },
