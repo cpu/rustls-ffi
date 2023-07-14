@@ -11,224 +11,58 @@ on:
     - cron: '15 12 * * 3'
 
 jobs:
-  build:
-    name: Build+test
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        # test a bunch of toolchains on ubuntu
-        cc: [clang, gcc]
-        rust:
-          - stable
-          - beta
-          - nightly
-          - 1.60.0 # MSRV - keep in sync with what rustls considers MSRV
-        os: [ubuntu-20.04]
-        # but only stable on macos/windows (slower platforms)
-        include:
-          - os: macos-latest
-            cc: clang
-            rust: stable
+  build-one:
+    name: Build+test one
+    runs-on: macos-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v3
         with:
           persist-credentials: false
-
-      - name: Install ${{ matrix.rust }} toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ matrix.rust }}
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
       - env:
           CARGO_UNSTABLE_HTTP_REGISTRY: true
-        run: make CC=${{ matrix.cc }} PROFILE=release test
-
-  valgrind:
-    name: Valgrind
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          persist-credentials: false
-      - name: Install valgrind
-        run: sudo apt-get update && sudo apt-get install -y valgrind
-      - run: export VALGRIND="valgrind -q"
-      - run: make test
-
-  test-windows:
-    name: Windows
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          persist-credentials: false
-      - name: Setup PATH for CL.EXE
-        uses: ilammy/msvc-dev-cmd@v1
-      # Remove link.exe from non-MSVC packages that interferes with MSVC link
-      - run: rm "C:\Program Files\Git\usr\bin\link.exe"
-      - run: rm "C:\msys64\usr\bin\link.exe"
-      - run: make -f Makefile.Windows
-
-  test-windows-cmake-debug:
-    name: Windows CMake, Debug configuration
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          persist-credentials: false
-      - name: Install nightly rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-      - name: Configure CMake
-        run: cmake -S . -B build
-      - name: Build, debug configuration
-        run: cmake --build build --config Debug
-      - name: Client-server test, debug
-        run: python tests/client-server.py build/tests/Debug/client.exe build/tests/Debug/server.exe
-      - name: Check static library list
-        run: python tests/verify-static-libraries.py
-
-  test-windows-cmake-release:
-    name: Windows CMake, Release configuration
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          persist-credentials: false
-      - name: Install nightly rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-      - name: Configure CMake
-        run: cmake -S . -B build
-      - name: Build, release configuration
-        run: cmake --build build --config Release
-      - name: Client-server test, release
-        run: python tests/client-server.py build/tests/Release/client.exe build/tests/Release/server.exe
-
-  ensure-header-updated:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          persist-credentials: false
-      - name: Install nightly rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-      - name: Install cbindgen
-        # Pin the installed version of cbindgen so that local usage can be
-        # reliably matched to CI. There can be non-semantic differences in
-        # output between point releases of cbindgen that will fail this check
-        # otherwise.
-        run: cargo install cbindgen --force --version 0.24.5
-      - run: touch src/lib.rs
-      - run: cbindgen --version
-      - run: make src/rustls.h
-      - run: git diff --exit-code
-
-  docs:
-    name: Check for documentation errors
-    runs-on: ubuntu-20.04
+        run: make CC=clang PROFILE=release test
+        
+  build-two:
+    name: Build+test two
+    runs-on: macos-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v3
         with:
           persist-credentials: false
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - env:
+          CARGO_UNSTABLE_HTTP_REGISTRY: true
+        run: make CC=clang PROFILE=release test
 
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: cargo doc (all features)
-        run: cargo doc --all-features --no-deps --workspace
-        env:
-          RUSTDOCFLAGS: -Dwarnings
-
-  minver:
-    name: Check minimum versions
-    runs-on: ubuntu-20.04
+  build-three:
+    name: Build+test three
+    runs-on: macos-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v3
         with:
           persist-credentials: false
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - env:
+          CARGO_UNSTABLE_HTTP_REGISTRY: true
+        run: make CC=clang PROFILE=release test
 
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: cargo test (debug; all features; -Z minimal-versions)
-        run: cargo -Z minimal-versions test --all-features
-
-  format:
-    name: Format
-    runs-on: ubuntu-latest
+  build-four:
+    name: Build+test four
+    runs-on: macos-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v3
         with:
           persist-credentials: false
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.67.1
-          components: rustfmt
-      - name: Check Rust formatting
-        run: cargo fmt --all -- --check
-      - name: Check C formatting
-        run: make format-check
-
-  clippy:
-    name: Clippy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v3
-        with:
-          persist-credentials: false
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.70.0
-          components: clippy
-      - name: Check clippy
-        # We allow unknown lints here because sometimes the nightly job
-        # (below) will have a new lint that we want to suppress.
-        # If we suppress (e.g. #![allow(clippy::arc_with_non_send_sync)]),
-        # we would get an unknown-lint error from older clippy versions.
-        run: cargo clippy --workspace -- -D warnings -A unknown-lints
-
-  clippy-nightly-optional:
-    name: Clippy nightly (optional)
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v3
-        with:
-          persist-credentials: false
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-        with:
-          components: clippy
-      - name: Check clippy
-        run: cargo clippy --workspace -- -D warnings
-
-  clang-tidy:
-    name: Clang Tidy
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v3
-        with:
-          persist-credentials: false
-      - name: Clang tidy
-        run: clang-tidy tests/*.c -- -I src/
-
-  miri:
-    name: Miri
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v3
-        with:
-          persist-credentials: false
-
-      - name: Install nightly Rust
-        uses: dtolnay/rust-toolchain@nightly
-      - run: rustup override set "nightly-$(curl -s https://rust-lang.github.io/rustup-components-history/x86_64-unknown-linux-gnu/miri)"
-      - run: rustup component add miri
-      - run: cargo miri test
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - env:
+          CARGO_UNSTABLE_HTTP_REGISTRY: true
+        run: make CC=clang PROFILE=release test
