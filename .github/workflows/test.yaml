@@ -227,7 +227,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@nightly
       - name: Install cargo-c
         env:
           LINK: https://github.com/lu-zero/cargo-c/releases/latest/download
