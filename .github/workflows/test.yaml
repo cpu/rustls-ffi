@@ -234,8 +234,8 @@ jobs:
           CARGO_C_FILE: cargo-c-x86_64-unknown-linux-musl.tar.gz
         run: |
           curl -L $LINK/$CARGO_C_FILE | tar xz -C ~/.cargo/bin
-      - name: Build with cargo-c
-        run: cargo cbuild
+      - name: Build and test with cargo-c
+        run: cargo capi test
 
   miri:
     name: Miri
