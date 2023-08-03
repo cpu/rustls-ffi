@@ -9,6 +9,7 @@ use std::time::SystemTime;
 
 use libc::{c_char, size_t};
 use rustls::client::{ResolvesClientCert, ServerCertVerified, ServerCertVerifier};
+use rustls::crypto::ring::Ring;
 use rustls::{
     sign::CertifiedKey, Certificate, CertificateError, ClientConfig, ClientConnection,
     ProtocolVersion, RootCertStore, SupportedCipherSuite, WantsVerifier, ALL_CIPHER_SUITES,
@@ -40,7 +41,7 @@ pub struct rustls_client_config_builder {
 }
 
 pub(crate) struct ClientConfigBuilder {
-    base: rustls::ConfigBuilder<ClientConfig, WantsVerifier>,
+    base: rustls::ConfigBuilder<ClientConfig<Ring>, WantsVerifier<Ring>>,
     verifier: Arc<dyn ServerCertVerifier>,
     alpn_protocols: Vec<Vec<u8>>,
     enable_sni: bool,
@@ -64,7 +65,7 @@ pub struct rustls_client_config {
 }
 
 impl CastConstPtr for rustls_client_config {
-    type RustType = ClientConfig;
+    type RustType = ClientConfig<Ring>;
 }
 
 impl ArcCastPtr for rustls_client_config {}
@@ -544,7 +545,7 @@ impl rustls_client_config {
             }
             CStr::from_ptr(server_name)
         };
-        let config: Arc<ClientConfig> = try_arc_from_ptr!(config);
+        let config: Arc<ClientConfig<Ring>> = try_arc_from_ptr!(config);
         let server_name: &str = match server_name.to_str() {
             Ok(s) => s,
             Err(std::str::Utf8Error { .. }) => return rustls_result::InvalidDnsNameError,

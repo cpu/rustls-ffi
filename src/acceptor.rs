@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 
 use libc::{c_void, size_t, EINVAL, EIO};
+use rustls::crypto::ring::Ring;
 use rustls::server::{Accepted, Acceptor};
 use rustls::ServerConfig;
 
@@ -404,7 +405,7 @@ impl rustls_accepted {
                 Some(a) => a,
                 None => return rustls_result::AlreadyUsed,
             };
-            let config: Arc<ServerConfig> = try_arc_from_ptr!(config);
+            let config: Arc<ServerConfig<Ring>> = try_arc_from_ptr!(config);
             match accepted.into_connection(config) {
                 Ok(built) => {
                     let wrapped = crate::connection::Connection::from_server(built);

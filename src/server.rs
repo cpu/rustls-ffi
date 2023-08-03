@@ -5,6 +5,7 @@ use std::slice;
 use std::sync::Arc;
 
 use libc::size_t;
+use rustls::crypto::ring::Ring;
 use rustls::server::{
     AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, ClientCertVerifier,
     ClientHello, NoClientAuth, ResolvesServerCert, ServerConfig, ServerConnection,
@@ -47,7 +48,7 @@ pub struct rustls_server_config_builder {
 }
 
 pub(crate) struct ServerConfigBuilder {
-    base: rustls::ConfigBuilder<ServerConfig, WantsVerifier>,
+    base: rustls::ConfigBuilder<ServerConfig<Ring>, WantsVerifier<Ring>>,
     verifier: Arc<dyn ClientCertVerifier>,
     cert_resolver: Option<Arc<dyn ResolvesServerCert>>,
     session_storage: Option<Arc<dyn StoresServerSessions + Send + Sync>>,
@@ -72,7 +73,7 @@ pub struct rustls_server_config {
 }
 
 impl CastConstPtr for rustls_server_config {
-    type RustType = ServerConfig;
+    type RustType = ServerConfig<Ring>;
 }
 
 impl ArcCastPtr for rustls_server_config {}
@@ -334,7 +335,7 @@ impl rustls_server_config {
         conn_out: *mut *mut rustls_connection,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let config: Arc<ServerConfig> = try_arc_from_ptr!(config);
+            let config: Arc<ServerConfig<Ring>> = try_arc_from_ptr!(config);
 
             let server_connection = match ServerConnection::new(config) {
                 Ok(sc) => sc,
