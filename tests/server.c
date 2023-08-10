@@ -241,8 +241,7 @@ main(int argc, const char **argv)
   struct rustls_root_cert_store *client_cert_root_store = NULL;
   struct rustls_web_pki_client_cert_verifier_builder
     *client_cert_verifier_builder = NULL;
-  const struct rustls_client_cert_verifier
-    *client_cert_verifier = NULL;
+  const struct rustls_client_cert_verifier *client_cert_verifier = NULL;
 
   /* Set this global variable for logging purposes. */
   programname = "server";
@@ -292,8 +291,7 @@ main(int argc, const char **argv)
     rustls_root_cert_store_add_pem(
       client_cert_root_store, (uint8_t *)certbuf, certbuf_len, true);
     client_cert_verifier_builder =
-      rustls_web_pki_client_cert_verifier_builder_new(
-        client_cert_root_store);
+      rustls_web_pki_client_cert_verifier_builder_new(client_cert_root_store);
 
     char crlbuf[10000];
     size_t crlbuf_len;
