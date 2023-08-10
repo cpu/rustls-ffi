@@ -5,9 +5,7 @@ use std::ptr::null;
 use std::slice;
 use std::sync::Arc;
 
-use rustls::server::{
-    AllowAnyAnonymousOrAuthenticatedClient, AllowAnyAuthenticatedClient, UnparsedCertRevocationList,
-};
+use rustls::server::{ClientCertVerifier, UnparsedCertRevocationList, WebPkiClientVerifier};
 use rustls::sign::CertifiedKey;
 use rustls::{
     Certificate, PrivateKey, RootCertStore, SupportedCipherSuite, ALL_CIPHER_SUITES,
@@ -15,13 +13,14 @@ use rustls::{
 };
 use rustls_pemfile::{certs, crls, pkcs8_private_keys, rsa_private_keys};
 
-use crate::error::{map_error, rustls_result};
+use crate::error::rustls_result;
 use crate::rslice::{rustls_slice_bytes, rustls_str};
+use crate::rustls_result::AlreadyUsed;
 use crate::{
-    ffi_panic_boundary, try_box_from_ptr, try_mut_from_ptr, try_ref_from_ptr, try_slice,
-    ArcCastPtr, BoxCastPtr, CastConstPtr, CastPtr,
+    error, ffi_panic_boundary, try_arc_from_ptr, try_box_from_ptr, try_mut_from_ptr,
+    try_ref_from_ptr, try_slice, ArcCastPtr, BoxCastPtr, CastPtr,
 };
-use rustls_result::{AlreadyUsed, NullParameter};
+use rustls_result::NullParameter;
 
 /// An X.509 certificate, as used in rustls.
 /// Corresponds to `Certificate` in the Rust API.
@@ -449,6 +448,8 @@ impl CastPtr for rustls_root_cert_store {
 
 impl BoxCastPtr for rustls_root_cert_store {}
 
+impl ArcCastPtr for rustls_root_cert_store {}
+
 impl rustls_root_cert_store {
     /// Create a rustls_root_cert_store. Caller owns the memory and must
     /// eventually call rustls_root_cert_store_free. The store starts out empty.
@@ -510,296 +511,180 @@ impl rustls_root_cert_store {
     }
 }
 
-/// A builder for a `rustls_allow_any_authenticated_client_verifier`. This builder object can be
-/// used to configure certificate revocation lists, and then turned into a
-/// `rustls_allow_any_authenticated_client_verifier` once ready.
-pub struct rustls_allow_any_authenticated_client_builder {
+/// A built client certificate verifier that can be provided to a `rustls_server_config_builder`
+/// with `rustls_server_config_builder_set_client_verifier`.
+pub struct rustls_client_cert_verifier {
     _private: [u8; 0],
 }
 
-impl CastPtr for rustls_allow_any_authenticated_client_builder {
-    // NOTE: contained value is consumed even on error, so this can contain None. but the caller
-    // still needs to free it
-    type RustType = Option<AllowAnyAuthenticatedClient>;
+impl CastPtr for rustls_client_cert_verifier {
+    type RustType = Arc<dyn ClientCertVerifier>;
 }
 
-impl BoxCastPtr for rustls_allow_any_authenticated_client_builder {}
+impl BoxCastPtr for rustls_client_cert_verifier {}
 
-impl rustls_allow_any_authenticated_client_builder {
-    /// Create a new allow any authenticated client certificate verifier builder using the root store.
-    ///
-    /// This copies the contents of the rustls_root_cert_store. It does not take
-    /// ownership of the pointed-to memory.
-    ///
-    /// This object can then be used to load any CRLs.
-    ///
-    /// Once that is complete, convert it into a real `rustls_allow_any_authenticated_client_verifier`
-    /// by calling `rustls_allow_any_authenticated_client_verifier_new()`.
+impl rustls_client_cert_verifier {
+    /// Free a `rustls_client_cert_verifier` previously returned from
+    /// `rustls_client_cert_verifier_builder_build`. Calling with NULL is fine. Must not be
+    /// called twice with the same value.
     #[no_mangle]
-    pub extern "C" fn rustls_allow_any_authenticated_client_builder_new(
-        store: *const rustls_root_cert_store,
-    ) -> *mut rustls_allow_any_authenticated_client_builder {
+    pub extern "C" fn rustls_client_cert_verifier_free(verifier: *mut rustls_client_cert_verifier) {
         ffi_panic_boundary! {
-            let store: &RootCertStore = try_ref_from_ptr!(store);
-            let client_cert_verifier = Some(AllowAnyAuthenticatedClient::new(store.clone()));
-            BoxCastPtr::to_mut_ptr(client_cert_verifier)
-        }
-    }
-
-    /// Add one or more certificate revocation lists (CRLs) to the client certificate verifier by
-    /// reading the CRL content from the provided buffer of PEM encoded content.
-    ///
-    /// This function returns an error if the provided buffer is not valid PEM encoded content,
-    /// or if the CRL content is invalid or unsupported.
-    #[no_mangle]
-    pub extern "C" fn rustls_allow_any_authenticated_client_builder_add_crl(
-        builder: *mut rustls_allow_any_authenticated_client_builder,
-        crl_pem: *const u8,
-        crl_pem_len: size_t,
-    ) -> rustls_result {
-        ffi_panic_boundary! {
-            let client_cert_verifier_builder: &mut Option<AllowAnyAuthenticatedClient> = try_mut_from_ptr!(builder);
-
-            let crl_pem: &[u8] = try_slice!(crl_pem, crl_pem_len);
-            let crls_der: Vec<UnparsedCertRevocationList> = match crls(&mut Cursor::new(crl_pem)) {
-                Ok(vv) => vv.into_iter().map(UnparsedCertRevocationList).collect(),
-                Err(_) => return rustls_result::CertificateRevocationListParseError,
-            };
-
-            let client_cert_verifier = match client_cert_verifier_builder.take() {
-                None => {
-                    return AlreadyUsed;
-                },
-                Some(x) => x,
-            };
-
-            match client_cert_verifier.with_crls(crls_der) {
-                Ok(v) => client_cert_verifier_builder.replace(v),
-                Err(e) => return map_error(rustls::Error::InvalidCertRevocationList(e)),
-            };
-
-            rustls_result::Ok
-        }
-    }
-
-    /// Free a `rustls_allow_any_authenticated_client_builder` previously returned from
-    /// `rustls_allow_any_authenticated_client_builder_new`.
-    /// Calling with NULL is fine. Must not be called twice with the same value.
-    #[no_mangle]
-    pub extern "C" fn rustls_allow_any_authenticated_client_builder_free(
-        builder: *mut rustls_allow_any_authenticated_client_builder,
-    ) {
-        ffi_panic_boundary! {
-            let store = try_box_from_ptr!(builder);
-            drop(store)
+            BoxCastPtr::to_box(verifier);
         }
     }
 }
 
-/// A verifier of client certificates that requires all certificates to be
-/// trusted based on a given `rustls_root_cert_store`. Usable in building server
-/// configurations. Connections without such a client certificate will not
-/// be accepted.
-pub struct rustls_allow_any_authenticated_client_verifier {
+/// A client certificate verifier being constructed. A builder can be modified by,
+/// e.g. `rustls_web_pki_client_cert_verifier_builder_add_crl`. Once you're
+/// done configuring settings, call `rustls_web_pki_client_cert_verifier_builder_build`
+/// to turn it into a `rustls_client_cert_verifier`. This object is not safe
+/// for concurrent mutation.
+// TODO(@cpu): Add rustdoc link once available.
+pub struct rustls_web_pki_client_cert_verifier_builder {
+    // We use the opaque struct pattern to tell C about our types without
+    // telling them what's inside.
+    // https://doc.rust-lang.org/nomicon/ffi.html#representing-opaque-structs
     _private: [u8; 0],
 }
 
-impl CastConstPtr for rustls_allow_any_authenticated_client_verifier {
-    type RustType = AllowAnyAuthenticatedClient;
+pub(crate) struct ClientCertVerifierBuilder {
+    roots: Arc<RootCertStore>,
+    crls: Vec<UnparsedCertRevocationList>,
+    allow_anonymous: bool,
 }
 
-impl ArcCastPtr for rustls_allow_any_authenticated_client_verifier {}
-
-impl rustls_allow_any_authenticated_client_verifier {
-    /// Create a new allow any authenticated client certificate verifier from a builder.
-    ///
-    /// The builder is consumed and cannot be used again, but must still be freed.
-    ///
-    /// The verifier can be used in several `rustls_server_config` instances. Must be freed by
-    /// the application when no longer needed. See the documentation of
-    /// `rustls_allow_any_authenticated_client_verifier_free` for details about lifetime.
-    /// This copies the contents of the `rustls_root_cert_store`. It does not take
-    /// ownership of the pointed-to memory.
-    #[no_mangle]
-    pub extern "C" fn rustls_allow_any_authenticated_client_verifier_new(
-        builder: *mut rustls_allow_any_authenticated_client_builder,
-    ) -> *const rustls_allow_any_authenticated_client_verifier {
-        ffi_panic_boundary! {
-            let client_cert_verifier_builder: &mut Option<AllowAnyAuthenticatedClient> = try_mut_from_ptr!(builder);
-
-            let client_cert_verifier = match client_cert_verifier_builder.take() {
-                None => {
-                    return null() as *const _;
-                },
-                Some(x) => x,
-            };
-            Arc::into_raw(client_cert_verifier.boxed()) as *const _
-        }
-    }
-
-    /// "Free" a verifier previously returned from
-    /// `rustls_allow_any_authenticated_client_verifier_new`. Since
-    /// `rustls_allow_any_authenticated_client_verifier` is actually an
-    /// atomically reference-counted pointer, extant server_configs may still
-    /// hold an internal reference to the Rust object. However, C code must
-    /// consider this pointer unusable after "free"ing it.
-    /// Calling with NULL is fine. Must not be called twice with the same value.
-    #[no_mangle]
-    pub extern "C" fn rustls_allow_any_authenticated_client_verifier_free(
-        verifier: *const rustls_allow_any_authenticated_client_verifier,
-    ) {
-        ffi_panic_boundary! {
-            rustls_allow_any_authenticated_client_verifier::free(verifier);
-        }
-    }
+impl CastPtr for rustls_web_pki_client_cert_verifier_builder {
+    type RustType = Option<ClientCertVerifierBuilder>;
 }
 
-/// A builder for a `rustls_allow_any_anonymous_or_authenticated_client_verifier`. This builder
-/// object can be used to configure certificate revocation lists, and then turned into a
-/// `rustls_allow_any_anonymous_or_authenticated_client_verifier` once ready.
-pub struct rustls_allow_any_anonymous_or_authenticated_client_builder {
-    _private: [u8; 0],
-}
+impl BoxCastPtr for rustls_web_pki_client_cert_verifier_builder {}
 
-impl CastPtr for rustls_allow_any_anonymous_or_authenticated_client_builder {
-    // NOTE: contained value is consumed even on error, so this can contain None. but the caller
-    // still needs to free it
-    type RustType = Option<AllowAnyAnonymousOrAuthenticatedClient>;
-}
-
-impl BoxCastPtr for rustls_allow_any_anonymous_or_authenticated_client_builder {}
-
-impl rustls_allow_any_anonymous_or_authenticated_client_builder {
-    /// Create a new allow any anonymous or authenticated client certificate verifier builder
-    /// using the root store.
+impl rustls_web_pki_client_cert_verifier_builder {
+    /// Create a `rustls_web_pki_client_cert_verifier_builder`. Caller owns the memory and must
+    /// eventually call `rustls_web_pki_client_cert_verifier_builder_build`, then free the
+    /// resulting `rustls_client_cert_verifier`.
     ///
-    /// This copies the contents of the rustls_root_cert_store. It does not take
-    /// ownership of the pointed-to memory.
+    /// Without further modification the builder will produce a client certificate verifier that
+    /// will require a client present a client certificate that chains to one of the trust anchors
+    /// in the provided `rustls_root_cert_store`. The root cert store must not be empty.
     ///
-    /// This object can then be used to load any CRLs.
+    /// Revocation checking will not be performed unless
+    /// `rustls_web_pki_client_cert_verifier_builder_add_crl` is used to add certificate revocation
+    /// lists (CRLs) to the builder.
     ///
-    /// Once that is complete, convert it into a real
-    /// `rustls_allow_any_anonymous_or_authenticated_client_verifier`
-    /// by calling `rustls_allow_any_anonymous_or_authenticated_client_verifier_new()`.
-    #[no_mangle]
-    pub extern "C" fn rustls_client_cert_verifier_optional_builder_new(
-        store: *const rustls_root_cert_store,
-    ) -> *mut rustls_allow_any_anonymous_or_authenticated_client_builder {
-        ffi_panic_boundary! {
-            let store: &RootCertStore = try_ref_from_ptr!(store);
-            let client_cert_verifier = Some(AllowAnyAnonymousOrAuthenticatedClient::new(store.clone()));
-            BoxCastPtr::to_mut_ptr(client_cert_verifier)
-        }
-    }
-
-    /// Add one or more certificate revocation lists (CRLs) to the client certificate verifier by
-    /// reading the CRL content from the provided buffer of PEM encoded content.
+    /// Anonymous unauthenticated clients will not be permitted unless
+    /// `rustls_web_pki_client_cert_verifier_builder_allow_unauthenticated` is used.
     ///
-    /// This function returns an error if the provided buffer is not valid PEM encoded content,
-    /// or if the CRL content is invalid or unsupported.
-    #[no_mangle]
-    pub extern "C" fn rustls_client_cert_verifier_optional_builder_add_crl(
-        builder: *mut rustls_allow_any_anonymous_or_authenticated_client_builder,
-        crl_pem: *const u8,
-        crl_pem_len: size_t,
-    ) -> rustls_result {
-        ffi_panic_boundary! {
-            let client_cert_verifier_builder: &mut Option<AllowAnyAnonymousOrAuthenticatedClient> = try_mut_from_ptr!(builder);
-
-            let crl_pem: &[u8] = try_slice!(crl_pem, crl_pem_len);
-            let crls_der: Vec<UnparsedCertRevocationList> = match crls(&mut Cursor::new(crl_pem)) {
-                Ok(vv) => vv.into_iter().map(UnparsedCertRevocationList).collect(),
-                Err(_) => return rustls_result::CertificateRevocationListParseError,
-            };
-
-            let client_cert_verifier = match client_cert_verifier_builder.take() {
-                None => {
-                    return AlreadyUsed;
-                },
-                Some(x) => x,
-            };
-
-            match client_cert_verifier.with_crls(crls_der) {
-                Ok(v) => client_cert_verifier_builder.replace(v),
-                Err(e) => return map_error(rustls::Error::InvalidCertRevocationList(e)),
-            };
-
-            rustls_result::Ok
-        }
-    }
-
-    /// Free a `rustls_allow_any_anonymous_or_authenticated_client_builder` previously returned from
-    /// `rustls_client_cert_verifier_optional_builder_new`.
-    /// Calling with NULL is fine. Must not be called twice with the same value.
-    #[no_mangle]
-    pub extern "C" fn rustls_client_cert_verifier_optional_builder_free(
-        builder: *mut rustls_allow_any_anonymous_or_authenticated_client_builder,
-    ) {
-        ffi_panic_boundary! {
-            let store = try_box_from_ptr!(builder);
-            drop(store)
-        }
-    }
-}
-
-/// Alternative to `rustls_allow_any_authenticated_client_verifier` that allows connections
-/// with or without a client certificate. If the client offers a certificate,
-/// it will be verified (and rejected if it is not valid). If the client
-/// does not offer a certificate, the connection will succeed.
-///
-/// The application can retrieve the certificate, if any, with
-/// `rustls_connection_get_peer_certificate`.
-pub struct rustls_allow_any_anonymous_or_authenticated_client_verifier {
-    _private: [u8; 0],
-}
-
-impl CastConstPtr for rustls_allow_any_anonymous_or_authenticated_client_verifier {
-    type RustType = AllowAnyAnonymousOrAuthenticatedClient;
-}
-
-impl ArcCastPtr for rustls_allow_any_anonymous_or_authenticated_client_verifier {}
-
-impl rustls_allow_any_anonymous_or_authenticated_client_verifier {
-    /// Create a new allow any anonymous or authenticated client certificate verifier builder
-    /// from the builder.
-    ///
-    /// The builder is consumed and cannot be used again, but must still be freed.
-    ///
-    /// The verifier can be used in several `rustls_server_config` instances. Must be
-    /// freed by the application when no longer needed. See the documentation of
-    /// `rustls_allow_any_anonymous_or_authenticated_client_verifier_free` for details about lifetime.
     /// This copies the contents of the `rustls_root_cert_store`. It does not take
     /// ownership of the pointed-to data.
     #[no_mangle]
-    pub extern "C" fn rustls_allow_any_anonymous_or_authenticated_client_verifier_new(
-        builder: *mut rustls_allow_any_anonymous_or_authenticated_client_builder,
-    ) -> *const rustls_allow_any_anonymous_or_authenticated_client_verifier {
+    pub extern "C" fn rustls_web_pki_client_cert_verifier_builder_new(
+        store: *const rustls_root_cert_store,
+    ) -> *mut rustls_web_pki_client_cert_verifier_builder {
         ffi_panic_boundary! {
-            let client_cert_verifier_builder: &mut Option<AllowAnyAnonymousOrAuthenticatedClient> = try_mut_from_ptr!(builder);
-
-            let client_cert_verifier = match client_cert_verifier_builder.take() {
-                None => {
-                    return null() as *const _;
-                },
-                Some(x) => x,
+            let store: Arc<RootCertStore> = try_arc_from_ptr!(store);
+            let builder = ClientCertVerifierBuilder {
+                roots: store,
+                crls: Vec::default(),
+                allow_anonymous: false,
             };
-            Arc::into_raw(client_cert_verifier.boxed()) as *const _
+            BoxCastPtr::to_mut_ptr(Some(builder))
         }
     }
 
-    /// "Free" a verifier previously returned from
-    /// `rustls_allow_any_anonymous_or_authenticated_client_verifier_new`. Since
-    /// `rustls_allow_any_anonymous_or_authenticated_client_verifier`
-    /// is actually an atomically reference-counted pointer, extant `server_configs` may still
-    /// hold an internal reference to the Rust object. However, C code must
-    /// consider this pointer unusable after "free"ing it.
-    /// Calling with NULL is fine. Must not be called twice with the same value.
+    /// Add one or more certificate revocation lists (CRLs) to the client certificate verifier
+    /// builder by reading the CRL content from the provided buffer of PEM encoded content.
+    ///
+    /// This function returns an error if the provided buffer is not valid PEM encoded content.
     #[no_mangle]
-    pub extern "C" fn rustls_allow_any_anonymous_or_authenticated_client_verifier_free(
-        verifier: *const rustls_allow_any_anonymous_or_authenticated_client_verifier,
+    pub extern "C" fn rustls_web_pki_client_cert_verifier_builder_add_crl(
+        builder: *mut rustls_web_pki_client_cert_verifier_builder,
+        crl_pem: *const u8,
+        crl_pem_len: size_t,
+    ) -> rustls_result {
+        ffi_panic_boundary! {
+            let client_verifier_builder: &mut Option<ClientCertVerifierBuilder> = try_mut_from_ptr!(builder);
+
+            let crl_pem: &[u8] = try_slice!(crl_pem, crl_pem_len);
+            let crls_der: Vec<UnparsedCertRevocationList> = match crls(&mut Cursor::new(crl_pem)) {
+                Ok(vv) => vv.into_iter().map(UnparsedCertRevocationList).collect(),
+                Err(_) => return rustls_result::CertificateRevocationListParseError,
+            };
+
+            let client_verifier_builder = match client_verifier_builder {
+                None => return AlreadyUsed,
+                Some(v) => v,
+            };
+
+            client_verifier_builder.crls.extend(crls_der);
+
+            rustls_result::Ok
+        }
+    }
+
+    /// Allow unauthenticated anonymous clients in addition to those that present a client
+    /// certificate that chains to one of the verifier's configured trust anchors.
+    pub extern "C" fn rustls_web_pki_client_cert_verifier_builder_allow_unauthenticated(
+        builder: *mut rustls_web_pki_client_cert_verifier_builder,
+    ) -> rustls_result {
+        ffi_panic_boundary! {
+            let client_verifier_builder: &mut Option<ClientCertVerifierBuilder> = try_mut_from_ptr!(builder);
+            let client_verifier_builder = match client_verifier_builder {
+                None => return AlreadyUsed,
+                Some(v) => v,
+            };
+
+            client_verifier_builder.allow_anonymous = true;
+
+            rustls_result::Ok
+        }
+    }
+
+    /// Create a new client certificate verifier from the builder.
+    ///
+    /// The builder is consumed and cannot be used again, but must still be freed.
+    ///
+    /// The verifier can be used in several `rustls_server_config` instances and must be
+    /// freed by the application when no longer needed. See the documentation of
+    /// `rustls_web_pki_client_cert_verifier_builder_free` for details about lifetime.
+    #[no_mangle]
+    pub extern "C" fn rustls_web_pki_client_cert_verifier_builder_build(
+        builder: *mut rustls_web_pki_client_cert_verifier_builder,
+        verifier_out: *mut *mut rustls_client_cert_verifier,
+    ) -> rustls_result {
+        ffi_panic_boundary! {
+            let client_verifier_builder: &mut Option<ClientCertVerifierBuilder> = try_mut_from_ptr!(builder);
+            let client_verifier_builder = match client_verifier_builder.take() {
+                None => return AlreadyUsed,
+                Some(v) => v,
+            };
+
+            let mut builder = WebPkiClientVerifier::builder(client_verifier_builder.roots)
+                .with_crls(client_verifier_builder.crls);
+            if client_verifier_builder.allow_anonymous {
+                builder = builder.allow_unauthenticated();
+            }
+
+            let verifier = match builder.build() {
+                Ok(v) => v,
+                Err(e) => return error::map_verifier_builder_error(e),
+            };
+            BoxCastPtr::set_mut_ptr(verifier_out, verifier);
+
+            rustls_result::Ok
+        }
+    }
+
+    /// Free a `rustls_client_cert_verifier_builder` previously returned from
+    /// `rustls_client_cert_verifier_builder_new`. Calling with NULL is fine. Must not be
+    /// called twice with the same value.
+    #[no_mangle]
+    pub extern "C" fn rustls_web_pki_client_cert_verifier_builder_free(
+        builder: *mut rustls_web_pki_client_cert_verifier_builder,
     ) {
         ffi_panic_boundary! {
-            rustls_allow_any_anonymous_or_authenticated_client_verifier::free(verifier);
+            BoxCastPtr::to_box(builder);
         }
     }
 }
