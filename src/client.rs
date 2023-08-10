@@ -8,11 +8,15 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 use libc::{c_char, size_t};
-use rustls::client::{ResolvesClientCert, ServerCertVerified, ServerCertVerifier};
+use rustls::client::{
+    HandshakeSignatureValid, ResolvesClientCert, ServerCertVerified, ServerCertVerifier,
+    WebPkiServerVerifier,
+};
 use rustls::crypto::ring::Ring;
 use rustls::{
     sign::CertifiedKey, Certificate, CertificateError, ClientConfig, ClientConnection,
-    ProtocolVersion, RootCertStore, SupportedCipherSuite, WantsVerifier, ALL_CIPHER_SUITES,
+    DigitallySignedStruct, Error, ProtocolVersion, RootCertStore, SignatureScheme,
+    SupportedCipherSuite, WantsVerifier, ALL_CIPHER_SUITES,
 };
 
 use crate::cipher::{rustls_certified_key, rustls_root_cert_store, rustls_supported_ciphersuite};
@@ -84,6 +88,28 @@ impl ServerCertVerifier for NoneVerifier {
         Err(rustls::Error::InvalidCertificate(
             CertificateError::BadSignature,
         ))
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &Certificate,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        Err(Error::InvalidCertificate(CertificateError::BadSignature))
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &Certificate,
+        _dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        Err(Error::InvalidCertificate(CertificateError::BadSignature))
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        WebPkiServerVerifier::default_supported_verify_schemes()
     }
 }
 
@@ -266,6 +292,28 @@ impl rustls::client::ServerCertVerifier for Verifier {
             rustls_result::Ok => Ok(ServerCertVerified::assertion()),
             r => Err(error::cert_result_to_error(r)),
         }
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &Certificate,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, Error> {
+        WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        WebPkiServerVerifier::default_supported_verify_schemes()
     }
 }
 
