@@ -605,7 +605,7 @@ impl rustls_web_pki_client_cert_verifier_builder {
     ) -> rustls_result {
         ffi_panic_boundary! {
             let client_verifier_builder: &mut Option<ClientCertVerifierBuilder> = try_mut_from_ptr!(builder);
-            let mut client_verifier_builder = match client_verifier_builder {
+            let client_verifier_builder = match client_verifier_builder {
                 None => return AlreadyUsed,
                 Some(v) => v,
             };
