@@ -563,7 +563,7 @@ impl rustls_web_pki_client_cert_verifier_builder {
         ffi_panic_boundary! {
             let store: Arc<RootCertStore> = try_arc_from_ptr!(store);
             let builder = ClientCertVerifierBuilder {
-                roots: store.clone(),
+                roots: store,
                 crls: Vec::default(),
                 allow_anonymous: false,
             };
