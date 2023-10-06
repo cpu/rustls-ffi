@@ -399,6 +399,12 @@ pub(crate) trait ArcCastPtr: CastConstPtr + Sized {
     fn to_const_ptr(src: Self::RustType) -> *const Self {
         Arc::into_raw(Arc::new(src)) as *const _
     }
+
+    fn set_mut_ptr(dst: *mut *const Self, src: Self::RustType) {
+        unsafe {
+            *dst = Self::to_const_ptr(src);
+        }
+    }
 }
 
 #[doc(hidden)]
