@@ -248,6 +248,15 @@ typedef struct rustls_iovec rustls_iovec;
 typedef struct rustls_root_cert_store rustls_root_cert_store;
 
 /**
+ * A `rustls_root_cert_store` being constructed. A builder can be modified by,
+ * adding trust anchor root certificates with `rustls_root_cert_store_builder_add_pem`.
+ * Once you're done adding root certificates, call `rustls_root_cert_store_builder_build`
+ * to turn it into a `rustls_root_cert_store`. This object is not safe
+ * for concurrent mutation.
+ */
+typedef struct rustls_root_cert_store_builder rustls_root_cert_store_builder;
+
+/**
  * A server config that is done being constructed and is now read-only.
  * Under the hood, this object corresponds to an `Arc<ServerConfig>`.
  * <https://docs.rs/rustls/latest/rustls/struct.ServerConfig.html>
@@ -937,15 +946,18 @@ rustls_result rustls_certified_key_clone_with_ocsp(const struct rustls_certified
 void rustls_certified_key_free(const struct rustls_certified_key *key);
 
 /**
- * Create a rustls_root_cert_store. Caller owns the memory and must
- * eventually call rustls_root_cert_store_free. The store starts out empty.
- * Caller must add root certificates with rustls_root_cert_store_add_pem.
- * <https://docs.rs/rustls/latest/rustls/struct.RootCertStore.html#method.empty>
+ * Create a `rustls_root_cert_store_builder`. Caller owns the memory and must
+ * eventually call `rustls_root_cert_store_builder_build`, then free the
+ * resulting `rustls_root_cert_store`.
+ *
+ * If you wish to abandon the builder without calling `rustls_root_cert_store_builder_build`,
+ * it must be freed with `rustls_root_cert_store_builder_free`.
  */
-struct rustls_root_cert_store *rustls_root_cert_store_new(void);
+struct rustls_root_cert_store_builder *rustls_root_cert_store_builder_new(void);
 
 /**
- * Add one or more certificates to the root cert store using PEM encoded data.
+ * Add one or more certificates to the root cert store builder using PEM
+ * encoded data.
  *
  * When `strict` is true an error will return a `CertificateParseError`
  * result. So will an attempt to parse data that has zero certificates.
@@ -954,16 +966,35 @@ struct rustls_root_cert_store *rustls_root_cert_store_new(void);
  * This may be useful on systems that have syntactically invalid root
  * certificates.
  */
-rustls_result rustls_root_cert_store_add_pem(struct rustls_root_cert_store *store,
-                                             const uint8_t *pem,
-                                             size_t pem_len,
-                                             bool strict);
+rustls_result rustls_root_cert_store_builder_add_pem(struct rustls_root_cert_store_builder *builder,
+                                                     const uint8_t *pem,
+                                                     size_t pem_len,
+                                                     bool strict);
+
+/**
+ * Create a new `rustls_root_cert_store` from the builder.
+ *
+ * The builder is consumed and cannot be used again, but must still be freed.
+ *
+ * The root cert store can be used in several `rustls_web_pki_client_cert_verifier_builder_new`
+ * instances and must be freed by the application when no longer needed. See the documentation of
+ * `rustls_root_cert_store_free` for details about lifetime.
+ */
+rustls_result rustls_root_cert_store_builder_build(struct rustls_root_cert_store_builder *builder,
+                                                   const struct rustls_root_cert_store **root_cert_store_out);
+
+/**
+ * Free a `rustls_root_cert_store_builder` previously returned from
+ * `rustls_root_cert_store_builder_new`. Calling with NULL is fine. Must not be
+ * called twice with the same value.
+ */
+void rustls_root_cert_store_builder_free(struct rustls_root_cert_store_builder *builder);
 
 /**
  * Free a rustls_root_cert_store previously returned from rustls_root_cert_store_builder_build.
  * Calling with NULL is fine. Must not be called twice with the same value.
  */
-void rustls_root_cert_store_free(struct rustls_root_cert_store *store);
+void rustls_root_cert_store_free(const struct rustls_root_cert_store *store);
 
 /**
  * Create a new allow any authenticated client certificate verifier builder using the root store.
