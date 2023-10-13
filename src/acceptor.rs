@@ -11,9 +11,9 @@ use crate::io::{rustls_read_callback, CallbackReader, ReadCallback};
 use crate::rslice::{rustls_slice_bytes, rustls_str};
 use crate::server::rustls_server_config;
 use crate::{
-    ffi_panic_boundary, rustls_result, to_box, to_boxed_mut_ptr, try_arc_from_ptr, try_callback,
-    try_mut_from_ptr, try_mut_from_ptr_new, try_ref_from_ptr, BoxCastPtr, BoxCastPtrMarker,
-    CastPtr, Castable,
+    ffi_panic_boundary, free_box, rustls_result, set_boxed_mut_ptr, to_box, to_boxed_mut_ptr,
+    try_arc_from_ptr, try_callback, try_mut_from_ptr_new, try_ref_from_ptr_new, BoxCastPtr,
+    BoxCastPtrMarker, Castable,
 };
 use rustls_result::NullParameter;
 
@@ -48,14 +48,6 @@ impl Castable for rustls_acceptor {
     type RustType = Acceptor;
 }
 
-/*
-impl CastPtr for rustls_acceptor {
-    type RustType = Acceptor;
-}
-
-impl BoxCastPtr for rustls_acceptor {}
- */
-
 /// A parsed ClientHello produced by a rustls_acceptor. It is used to check
 /// server name indication (SNI), ALPN protocols, signature schemes, and
 /// cipher suites. It can be combined with a rustls_server_config to build a
@@ -64,11 +56,10 @@ pub struct rustls_accepted {
     _private: [u8; 0],
 }
 
-impl CastPtr for rustls_accepted {
+impl Castable for rustls_accepted {
+    type CastSource = BoxCastPtrMarker;
     type RustType = Option<Accepted>;
 }
-
-impl BoxCastPtr for rustls_accepted {}
 
 impl rustls_acceptor {
     /// Create and return a new rustls_acceptor.
@@ -193,7 +184,7 @@ impl rustls_acceptor {
                 Ok(None) => rustls_result::AcceptorNotReady,
                 Err(e) => map_error(e),
                 Ok(Some(accepted)) => {
-                    BoxCastPtr::set_mut_ptr(out_accepted, Some(accepted));
+                    set_boxed_mut_ptr(out_accepted, Some(accepted));
                     rustls_result::Ok
                 }
             }
@@ -227,7 +218,7 @@ impl rustls_accepted {
         accepted: *const rustls_accepted,
     ) -> rustls_str<'static> {
         ffi_panic_boundary! {
-            let accepted: &Option<Accepted> = try_ref_from_ptr!(accepted);
+            let accepted: &Option<Accepted> = try_ref_from_ptr_new!(accepted);
             let accepted = match accepted {
                 Some(a) => a,
                 None => return Default::default(),
@@ -268,7 +259,7 @@ impl rustls_accepted {
         i: usize,
     ) -> u16 {
         ffi_panic_boundary! {
-            let accepted: &Option<Accepted> = try_ref_from_ptr!(accepted);
+            let accepted: &Option<Accepted> = try_ref_from_ptr_new!(accepted);
             let accepted = match accepted {
                 Some(a) => a,
                 None => return 0,
@@ -306,7 +297,7 @@ impl rustls_accepted {
         i: usize,
     ) -> u16 {
         ffi_panic_boundary! {
-            let accepted: &Option<Accepted> = try_ref_from_ptr!(accepted);
+            let accepted: &Option<Accepted> = try_ref_from_ptr_new!(accepted);
             let accepted = match accepted {
                 Some(a) => a,
                 None => return 0,
@@ -349,7 +340,7 @@ impl rustls_accepted {
         i: usize,
     ) -> rustls_slice_bytes<'static> {
         ffi_panic_boundary! {
-            let accepted: &Option<Accepted> = try_ref_from_ptr!(accepted);
+            let accepted: &Option<Accepted> = try_ref_from_ptr_new!(accepted);
             let accepted = match accepted {
                 Some(a) => a,
                 None => return Default::default(),
@@ -407,7 +398,7 @@ impl rustls_accepted {
         out_conn: *mut *mut rustls_connection,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let accepted: &mut Option<Accepted> = try_mut_from_ptr!(accepted);
+            let accepted: &mut Option<Accepted> = try_mut_from_ptr_new!(accepted);
             let accepted = match accepted.take() {
                 Some(a) => a,
                 None => return rustls_result::AlreadyUsed,
@@ -434,7 +425,7 @@ impl rustls_accepted {
     #[no_mangle]
     pub extern "C" fn rustls_accepted_free(accepted: *mut rustls_accepted) {
         ffi_panic_boundary! {
-            BoxCastPtr::to_box(accepted);
+            free_box(accepted);
         }
     }
 }

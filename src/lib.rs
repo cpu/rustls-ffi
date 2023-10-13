@@ -399,6 +399,24 @@ macro_rules! try_mut_from_ptr_new {
     };
 }
 
+pub(crate) fn try_from_new<'a, C, CS>(from: *const C) -> Option<&'a C::RustType>
+where
+    C: Castable<CastSource = CS>,
+{
+    unsafe { cast_const_ptr(from).as_ref() }
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! try_ref_from_ptr_new {
+    ( $var:ident ) => {
+        match $crate::try_from_new($var) {
+            Some(c) => c,
+            None => return $crate::panic::NullParameterOrDefault::value(),
+        }
+    };
+}
+
 /// CastPtr represents the relationship between a snake case type (like rustls_client_config)
 /// and the corresponding Rust type (like ClientConfig). For each matched pair of types, there
 /// should be an `impl CastPtr for foo_bar { RustTy = FooBar }`.
