@@ -18,8 +18,8 @@ use rustls_pemfile::{certs, crls, pkcs8_private_keys, rsa_private_keys};
 use crate::error::{map_error, rustls_result};
 use crate::rslice::{rustls_slice_bytes, rustls_str};
 use crate::{
-    ffi_panic_boundary, try_box_from_ptr, try_mut_from_ptr, try_ref_from_ptr, try_slice,
-    ArcCastPtr, BoxCastPtr, CastConstPtr, CastPtr,
+    ffi_panic_boundary, try_box_from_ptr, try_mut_from_ptr, try_ref_from_ptr, try_ref_from_ptr_new,
+    try_slice, ArcCastPtr, ArcCastPtrMarker, BoxCastPtr, CastConstPtr, CastPtr, Castable,
 };
 use rustls_result::{AlreadyUsed, NullParameter};
 
@@ -33,7 +33,8 @@ pub struct rustls_certificate {
     _private: [u8; 0],
 }
 
-impl CastPtr for rustls_certificate {
+impl Castable for rustls_certificate {
+    type CastSource = ArcCastPtrMarker;
     type RustType = Certificate;
 }
 
@@ -47,7 +48,7 @@ impl rustls_certificate {
         out_der_len: *mut size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let cert = try_ref_from_ptr!(cert);
+            let cert = try_ref_from_ptr_new!(cert);
             if out_der_data.is_null() || out_der_len.is_null() {
                 return NullParameter
             }
