@@ -604,28 +604,6 @@ where
     unsafe { F::cast_const_ptr(from).as_ref() }
 }
 
-/// Turn a raw mut pointer into a mutable reference.
-pub(crate) fn try_from_mut<'a, F, T>(from: *mut F) -> Option<&'a mut T>
-where
-    F: CastPtr<RustType = T>,
-{
-    unsafe { F::cast_mut_ptr(from).as_mut() }
-}
-
-pub(crate) fn try_box_from<F, T>(from: *mut F) -> Option<Box<T>>
-where
-    F: BoxCastPtr<RustType = T>,
-{
-    F::to_box(from)
-}
-
-pub(crate) fn try_arc_from<F, T>(from: *const F) -> Option<Arc<T>>
-where
-    F: ArcCastPtr<RustType = T>,
-{
-    F::to_arc(from)
-}
-
 /// If the provided pointer is non-null, convert it to a reference.
 /// Otherwise, return NullParameter, or an appropriate default (false, 0, NULL)
 /// based on the context;

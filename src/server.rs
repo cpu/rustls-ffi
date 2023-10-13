@@ -29,10 +29,10 @@ use crate::session::{
     SessionStoreGetCallback, SessionStorePutCallback,
 };
 use crate::{
-    ffi_panic_boundary, free_box, set_boxed_mut_ptr, to_boxed_mut_ptr, try_arc_from_ptr,
+    ffi_panic_boundary, free_arc, free_box, set_boxed_mut_ptr, to_arc_const_ptr, to_boxed_mut_ptr,
     try_arc_from_ptr_new, try_box_from_ptr_new, try_mut_from_ptr_new, try_ref_from_ptr,
-    try_ref_from_ptr_new, try_slice, userdata_get, ArcCastPtr, BoxCastPtr, BoxCastPtrMarker,
-    CastConstPtr, CastPtr, Castable,
+    try_ref_from_ptr_new, try_slice, userdata_get, ArcCastPtrMarker, BoxCastPtrMarker, CastPtr,
+    Castable,
 };
 
 /// A server config being constructed. A builder can be modified by,
@@ -72,11 +72,10 @@ pub struct rustls_server_config {
     _private: [u8; 0],
 }
 
-impl CastConstPtr for rustls_server_config {
+impl Castable for rustls_server_config {
+    type CastSource = ArcCastPtrMarker;
     type RustType = ServerConfig;
 }
-
-impl ArcCastPtr for rustls_server_config {}
 
 impl rustls_server_config_builder {
     /// Create a rustls_server_config_builder. Caller owns the memory and must
@@ -304,7 +303,7 @@ impl rustls_server_config_builder {
             if let Some(ignore_client_order) = builder.ignore_client_order {
                 config.ignore_client_order = ignore_client_order;
             }
-            ArcCastPtr::to_const_ptr(config)
+            to_arc_const_ptr(config)
         }
     }
 }
@@ -319,7 +318,7 @@ impl rustls_server_config {
     #[no_mangle]
     pub extern "C" fn rustls_server_config_free(config: *const rustls_server_config) {
         ffi_panic_boundary! {
-            rustls_server_config::free(config);
+            free_arc(config);
         }
     }
 
@@ -335,7 +334,7 @@ impl rustls_server_config {
         conn_out: *mut *mut rustls_connection,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let config: Arc<ServerConfig> = try_arc_from_ptr!(config);
+            let config: Arc<ServerConfig> = try_arc_from_ptr_new!(config);
 
             let server_connection = match ServerConnection::new(config) {
                 Ok(sc) => sc,
@@ -683,7 +682,7 @@ mod tests {
         );
         let config = rustls_server_config_builder::rustls_server_config_builder_build(builder);
         {
-            let config2 = try_ref_from_ptr!(config);
+            let config2 = try_ref_from_ptr_new!(config);
             assert_eq!(config2.alpn_protocols, vec![h1, h2]);
         }
         rustls_server_config::rustls_server_config_free(config);
