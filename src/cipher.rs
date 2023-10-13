@@ -18,9 +18,9 @@ use rustls_pemfile::{certs, crls, pkcs8_private_keys, rsa_private_keys};
 use crate::error::{map_error, rustls_result};
 use crate::rslice::{rustls_slice_bytes, rustls_str};
 use crate::{
-    ffi_panic_boundary, free_arc, to_arc_const_ptr, to_boxed_mut_ptr, try_box_from_ptr,
-    try_box_from_ptr_new, try_mut_from_ptr, try_mut_from_ptr_new, try_ref_from_ptr_new, try_slice,
-    ArcCastPtr, ArcCastPtrMarker, BoxCastPtr, BoxCastPtrMarker, CastConstPtr, CastPtr, Castable,
+    ffi_panic_boundary, free_arc, to_arc_const_ptr, to_boxed_mut_ptr, try_box_from_ptr_new,
+    try_mut_from_ptr_new, try_ref_from_ptr_new, try_slice, ArcCastPtrMarker, BoxCastPtrMarker,
+    Castable,
 };
 use rustls_result::{AlreadyUsed, NullParameter};
 
@@ -658,13 +658,10 @@ pub struct rustls_allow_any_anonymous_or_authenticated_client_builder {
     _private: [u8; 0],
 }
 
-impl CastPtr for rustls_allow_any_anonymous_or_authenticated_client_builder {
-    // NOTE: contained value is consumed even on error, so this can contain None. but the caller
-    // still needs to free it
+impl Castable for rustls_allow_any_anonymous_or_authenticated_client_builder {
+    type CastSource = BoxCastPtrMarker;
     type RustType = Option<AllowAnyAnonymousOrAuthenticatedClient>;
 }
-
-impl BoxCastPtr for rustls_allow_any_anonymous_or_authenticated_client_builder {}
 
 impl rustls_allow_any_anonymous_or_authenticated_client_builder {
     /// Create a new allow any anonymous or authenticated client certificate verifier builder
@@ -685,7 +682,7 @@ impl rustls_allow_any_anonymous_or_authenticated_client_builder {
         ffi_panic_boundary! {
             let store: &RootCertStore = try_ref_from_ptr_new!(store);
             let client_cert_verifier = Some(AllowAnyAnonymousOrAuthenticatedClient::new(store.clone()));
-            BoxCastPtr::to_mut_ptr(client_cert_verifier)
+            to_boxed_mut_ptr(client_cert_verifier)
         }
     }
 
@@ -701,7 +698,7 @@ impl rustls_allow_any_anonymous_or_authenticated_client_builder {
         crl_pem_len: size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let client_cert_verifier_builder: &mut Option<AllowAnyAnonymousOrAuthenticatedClient> = try_mut_from_ptr!(builder);
+            let client_cert_verifier_builder: &mut Option<AllowAnyAnonymousOrAuthenticatedClient> = try_mut_from_ptr_new!(builder);
 
             let crl_pem: &[u8] = try_slice!(crl_pem, crl_pem_len);
             let crls_der: Vec<UnparsedCertRevocationList> = match crls(&mut Cursor::new(crl_pem)) {
@@ -733,7 +730,7 @@ impl rustls_allow_any_anonymous_or_authenticated_client_builder {
         builder: *mut rustls_allow_any_anonymous_or_authenticated_client_builder,
     ) {
         ffi_panic_boundary! {
-            let store = try_box_from_ptr!(builder);
+            let store = try_box_from_ptr_new!(builder);
             drop(store)
         }
     }
@@ -750,11 +747,10 @@ pub struct rustls_allow_any_anonymous_or_authenticated_client_verifier {
     _private: [u8; 0],
 }
 
-impl CastConstPtr for rustls_allow_any_anonymous_or_authenticated_client_verifier {
+impl Castable for rustls_allow_any_anonymous_or_authenticated_client_verifier {
+    type CastSource = ArcCastPtrMarker;
     type RustType = AllowAnyAnonymousOrAuthenticatedClient;
 }
-
-impl ArcCastPtr for rustls_allow_any_anonymous_or_authenticated_client_verifier {}
 
 impl rustls_allow_any_anonymous_or_authenticated_client_verifier {
     /// Create a new allow any anonymous or authenticated client certificate verifier builder
@@ -772,7 +768,7 @@ impl rustls_allow_any_anonymous_or_authenticated_client_verifier {
         builder: *mut rustls_allow_any_anonymous_or_authenticated_client_builder,
     ) -> *const rustls_allow_any_anonymous_or_authenticated_client_verifier {
         ffi_panic_boundary! {
-            let client_cert_verifier_builder: &mut Option<AllowAnyAnonymousOrAuthenticatedClient> = try_mut_from_ptr!(builder);
+            let client_cert_verifier_builder: &mut Option<AllowAnyAnonymousOrAuthenticatedClient> = try_mut_from_ptr_new!(builder);
 
             let client_cert_verifier = match client_cert_verifier_builder.take() {
                 None => {
@@ -796,7 +792,7 @@ impl rustls_allow_any_anonymous_or_authenticated_client_verifier {
         verifier: *const rustls_allow_any_anonymous_or_authenticated_client_verifier,
     ) {
         ffi_panic_boundary! {
-            rustls_allow_any_anonymous_or_authenticated_client_verifier::free(verifier);
+            free_arc(verifier);
         }
     }
 }

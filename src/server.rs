@@ -188,7 +188,7 @@ impl rustls_server_config_builder {
     ) {
         ffi_panic_boundary! {
             let builder: &mut ServerConfigBuilder = try_mut_from_ptr!(builder);
-            let verifier: Arc<AllowAnyAnonymousOrAuthenticatedClient> = try_arc_from_ptr!(verifier);
+            let verifier: Arc<AllowAnyAnonymousOrAuthenticatedClient> = try_arc_from_ptr_new!(verifier);
 
             builder.verifier = verifier;
         }
