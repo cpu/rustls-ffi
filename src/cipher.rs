@@ -518,13 +518,10 @@ pub struct rustls_allow_any_authenticated_client_builder {
     _private: [u8; 0],
 }
 
-impl CastPtr for rustls_allow_any_authenticated_client_builder {
-    // NOTE: contained value is consumed even on error, so this can contain None. but the caller
-    // still needs to free it
+impl Castable for rustls_allow_any_authenticated_client_builder {
+    type CastSource = BoxCastPtrMarker;
     type RustType = Option<AllowAnyAuthenticatedClient>;
 }
-
-impl BoxCastPtr for rustls_allow_any_authenticated_client_builder {}
 
 impl rustls_allow_any_authenticated_client_builder {
     /// Create a new allow any authenticated client certificate verifier builder using the root store.
@@ -543,7 +540,7 @@ impl rustls_allow_any_authenticated_client_builder {
         ffi_panic_boundary! {
             let store: &RootCertStore = try_ref_from_ptr_new!(store);
             let client_cert_verifier = Some(AllowAnyAuthenticatedClient::new(store.clone()));
-            BoxCastPtr::to_mut_ptr(client_cert_verifier)
+            to_boxed_mut_ptr(client_cert_verifier)
         }
     }
 
@@ -559,7 +556,7 @@ impl rustls_allow_any_authenticated_client_builder {
         crl_pem_len: size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let client_cert_verifier_builder: &mut Option<AllowAnyAuthenticatedClient> = try_mut_from_ptr!(builder);
+            let client_cert_verifier_builder: &mut Option<AllowAnyAuthenticatedClient> = try_mut_from_ptr_new!(builder);
 
             let crl_pem: &[u8] = try_slice!(crl_pem, crl_pem_len);
             let crls_der: Vec<UnparsedCertRevocationList> = match crls(&mut Cursor::new(crl_pem)) {
@@ -591,7 +588,7 @@ impl rustls_allow_any_authenticated_client_builder {
         builder: *mut rustls_allow_any_authenticated_client_builder,
     ) {
         ffi_panic_boundary! {
-            let store = try_box_from_ptr!(builder);
+            let store = try_box_from_ptr_new!(builder);
             drop(store)
         }
     }
@@ -625,7 +622,7 @@ impl rustls_allow_any_authenticated_client_verifier {
         builder: *mut rustls_allow_any_authenticated_client_builder,
     ) -> *const rustls_allow_any_authenticated_client_verifier {
         ffi_panic_boundary! {
-            let client_cert_verifier_builder: &mut Option<AllowAnyAuthenticatedClient> = try_mut_from_ptr!(builder);
+            let client_cert_verifier_builder: &mut Option<AllowAnyAuthenticatedClient> = try_mut_from_ptr_new!(builder);
 
             let client_cert_verifier = match client_cert_verifier_builder.take() {
                 None => {
