@@ -18,9 +18,8 @@ use rustls_pemfile::{certs, crls, pkcs8_private_keys, rsa_private_keys};
 use crate::error::{map_error, rustls_result};
 use crate::rslice::{rustls_slice_bytes, rustls_str};
 use crate::{
-    ffi_panic_boundary, free_arc, to_arc_const_ptr, to_boxed_mut_ptr, try_box_from_ptr_new,
-    try_mut_from_ptr_new, try_ref_from_ptr_new, try_slice, ArcCastPtrMarker, BoxCastPtrMarker,
-    Castable,
+    ffi_panic_boundary, free_arc, to_arc_const_ptr, to_boxed_mut_ptr, try_box_from_ptr,
+    try_mut_from_ptr, try_ref_from_ptr, try_slice, ArcCastPtrMarker, BoxCastPtrMarker, Castable,
 };
 use rustls_result::{AlreadyUsed, NullParameter};
 
@@ -49,7 +48,7 @@ impl rustls_certificate {
         out_der_len: *mut size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let cert = try_ref_from_ptr_new!(cert);
+            let cert = try_ref_from_ptr!(cert);
             if out_der_data.is_null() || out_der_len.is_null() {
                 return NullParameter
             }
@@ -81,7 +80,7 @@ impl rustls_supported_ciphersuite {
     pub extern "C" fn rustls_supported_ciphersuite_get_suite(
         supported_ciphersuite: *const rustls_supported_ciphersuite,
     ) -> u16 {
-        let supported_ciphersuite = try_ref_from_ptr_new!(supported_ciphersuite);
+        let supported_ciphersuite = try_ref_from_ptr!(supported_ciphersuite);
         match supported_ciphersuite {
             rustls::SupportedCipherSuite::Tls12(sc) => &sc.common,
             rustls::SupportedCipherSuite::Tls13(sc) => &sc.common,
@@ -99,7 +98,7 @@ impl rustls_supported_ciphersuite {
 pub extern "C" fn rustls_supported_ciphersuite_get_name(
     supported_ciphersuite: *const rustls_supported_ciphersuite,
 ) -> rustls_str<'static> {
-    let supported_ciphersuite = try_ref_from_ptr_new!(supported_ciphersuite);
+    let supported_ciphersuite = try_ref_from_ptr!(supported_ciphersuite);
     let s = supported_ciphersuite.suite().as_str().unwrap_or("");
     match rustls_str::try_from(s) {
         Ok(s) => s,
@@ -216,7 +215,7 @@ mod tests {
             .iter()
             .zip(unsafe { RUSTLS_ALL_CIPHER_SUITES }.iter().copied())
         {
-            let ffi_cipher_suite = try_ref_from_ptr_new!(ffi);
+            let ffi_cipher_suite = try_ref_from_ptr!(ffi);
             assert_eq!(original, ffi_cipher_suite);
         }
     }
@@ -231,7 +230,7 @@ mod tests {
             .iter()
             .zip(unsafe { RUSTLS_DEFAULT_CIPHER_SUITES }.iter().copied())
         {
-            let ffi_cipher_suite = try_ref_from_ptr_new!(ffi);
+            let ffi_cipher_suite = try_ref_from_ptr!(ffi);
             assert_eq!(original, ffi_cipher_suite);
         }
     }
@@ -334,7 +333,7 @@ impl rustls_certified_key {
         i: size_t,
     ) -> *const rustls_certificate {
         ffi_panic_boundary! {
-            let certified_key: &CertifiedKey = try_ref_from_ptr_new!(certified_key);
+            let certified_key: &CertifiedKey = try_ref_from_ptr!(certified_key);
             match certified_key.cert.get(i) {
                 Some(cert) => cert as *const Certificate as *const _,
                 None => null()
@@ -360,7 +359,7 @@ impl rustls_certified_key {
                     None => return NullParameter,
                 }
             };
-            let certified_key: &CertifiedKey = try_ref_from_ptr_new!(certified_key);
+            let certified_key: &CertifiedKey = try_ref_from_ptr!(certified_key);
             let mut new_key = certified_key.clone();
             if !ocsp_response.is_null() {
                 let ocsp_slice = unsafe{ &*ocsp_response };
@@ -480,7 +479,7 @@ impl rustls_root_cert_store {
     ) -> rustls_result {
         ffi_panic_boundary! {
             let certs_pem: &[u8] = try_slice!(pem, pem_len);
-            let store: &mut RootCertStore = try_mut_from_ptr_new!(store);
+            let store: &mut RootCertStore = try_mut_from_ptr!(store);
 
             let certs_der = match rustls_pemfile::certs(&mut Cursor::new(certs_pem)) {
                 Ok(vv) => vv,
@@ -505,7 +504,7 @@ impl rustls_root_cert_store {
     #[no_mangle]
     pub extern "C" fn rustls_root_cert_store_free(store: *mut rustls_root_cert_store) {
         ffi_panic_boundary! {
-            let store = try_box_from_ptr_new!(store);
+            let store = try_box_from_ptr!(store);
             drop(store)
         }
     }
@@ -538,7 +537,7 @@ impl rustls_allow_any_authenticated_client_builder {
         store: *const rustls_root_cert_store,
     ) -> *mut rustls_allow_any_authenticated_client_builder {
         ffi_panic_boundary! {
-            let store: &RootCertStore = try_ref_from_ptr_new!(store);
+            let store: &RootCertStore = try_ref_from_ptr!(store);
             let client_cert_verifier = Some(AllowAnyAuthenticatedClient::new(store.clone()));
             to_boxed_mut_ptr(client_cert_verifier)
         }
@@ -556,7 +555,7 @@ impl rustls_allow_any_authenticated_client_builder {
         crl_pem_len: size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let client_cert_verifier_builder: &mut Option<AllowAnyAuthenticatedClient> = try_mut_from_ptr_new!(builder);
+            let client_cert_verifier_builder: &mut Option<AllowAnyAuthenticatedClient> = try_mut_from_ptr!(builder);
 
             let crl_pem: &[u8] = try_slice!(crl_pem, crl_pem_len);
             let crls_der: Vec<UnparsedCertRevocationList> = match crls(&mut Cursor::new(crl_pem)) {
@@ -588,7 +587,7 @@ impl rustls_allow_any_authenticated_client_builder {
         builder: *mut rustls_allow_any_authenticated_client_builder,
     ) {
         ffi_panic_boundary! {
-            let store = try_box_from_ptr_new!(builder);
+            let store = try_box_from_ptr!(builder);
             drop(store)
         }
     }
@@ -622,7 +621,7 @@ impl rustls_allow_any_authenticated_client_verifier {
         builder: *mut rustls_allow_any_authenticated_client_builder,
     ) -> *const rustls_allow_any_authenticated_client_verifier {
         ffi_panic_boundary! {
-            let client_cert_verifier_builder: &mut Option<AllowAnyAuthenticatedClient> = try_mut_from_ptr_new!(builder);
+            let client_cert_verifier_builder: &mut Option<AllowAnyAuthenticatedClient> = try_mut_from_ptr!(builder);
 
             let client_cert_verifier = match client_cert_verifier_builder.take() {
                 None => {
@@ -680,7 +679,7 @@ impl rustls_allow_any_anonymous_or_authenticated_client_builder {
         store: *const rustls_root_cert_store,
     ) -> *mut rustls_allow_any_anonymous_or_authenticated_client_builder {
         ffi_panic_boundary! {
-            let store: &RootCertStore = try_ref_from_ptr_new!(store);
+            let store: &RootCertStore = try_ref_from_ptr!(store);
             let client_cert_verifier = Some(AllowAnyAnonymousOrAuthenticatedClient::new(store.clone()));
             to_boxed_mut_ptr(client_cert_verifier)
         }
@@ -698,7 +697,7 @@ impl rustls_allow_any_anonymous_or_authenticated_client_builder {
         crl_pem_len: size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let client_cert_verifier_builder: &mut Option<AllowAnyAnonymousOrAuthenticatedClient> = try_mut_from_ptr_new!(builder);
+            let client_cert_verifier_builder: &mut Option<AllowAnyAnonymousOrAuthenticatedClient> = try_mut_from_ptr!(builder);
 
             let crl_pem: &[u8] = try_slice!(crl_pem, crl_pem_len);
             let crls_der: Vec<UnparsedCertRevocationList> = match crls(&mut Cursor::new(crl_pem)) {
@@ -730,7 +729,7 @@ impl rustls_allow_any_anonymous_or_authenticated_client_builder {
         builder: *mut rustls_allow_any_anonymous_or_authenticated_client_builder,
     ) {
         ffi_panic_boundary! {
-            let store = try_box_from_ptr_new!(builder);
+            let store = try_box_from_ptr!(builder);
             drop(store)
         }
     }
@@ -768,7 +767,7 @@ impl rustls_allow_any_anonymous_or_authenticated_client_verifier {
         builder: *mut rustls_allow_any_anonymous_or_authenticated_client_builder,
     ) -> *const rustls_allow_any_anonymous_or_authenticated_client_verifier {
         ffi_panic_boundary! {
-            let client_cert_verifier_builder: &mut Option<AllowAnyAnonymousOrAuthenticatedClient> = try_mut_from_ptr_new!(builder);
+            let client_cert_verifier_builder: &mut Option<AllowAnyAnonymousOrAuthenticatedClient> = try_mut_from_ptr!(builder);
 
             let client_cert_verifier = match client_cert_verifier_builder.take() {
                 None => {

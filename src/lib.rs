@@ -388,7 +388,7 @@ where
 }
 
 /// Turn a raw mut pointer into a mutable reference.
-pub(crate) fn try_from_mut_new<'a, C>(from: *mut C) -> Option<&'a mut C::RustType>
+pub(crate) fn try_from_mut<'a, C>(from: *mut C) -> Option<&'a mut C::RustType>
 where
     C: Castable<CastSource = BoxCastPtrMarker>,
 {
@@ -397,16 +397,16 @@ where
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! try_mut_from_ptr_new {
+macro_rules! try_mut_from_ptr {
     ( $var:ident ) => {
-        match $crate::try_from_mut_new($var) {
+        match $crate::try_from_mut($var) {
             Some(c) => c,
             None => return $crate::panic::NullParameterOrDefault::value(),
         }
     };
 }
 
-pub(crate) fn try_from_new<'a, C, CS>(from: *const C) -> Option<&'a C::RustType>
+pub(crate) fn try_from<'a, C, CS>(from: *const C) -> Option<&'a C::RustType>
 where
     C: Castable<CastSource = CS>,
 {
@@ -415,16 +415,16 @@ where
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! try_ref_from_ptr_new {
+macro_rules! try_ref_from_ptr {
     ( $var:ident ) => {
-        match $crate::try_from_new($var) {
+        match $crate::try_from($var) {
             Some(c) => c,
             None => return $crate::panic::NullParameterOrDefault::value(),
         }
     };
 }
 
-pub(crate) fn try_arc_from_new<C>(from: *const C) -> Option<Arc<C::RustType>>
+pub(crate) fn try_arc_from<C>(from: *const C) -> Option<Arc<C::RustType>>
 where
     C: Castable<CastSource = ArcCastPtrMarker>,
 {
@@ -433,16 +433,16 @@ where
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! try_arc_from_ptr_new {
+macro_rules! try_arc_from_ptr {
     ( $var:ident ) => {
-        match $crate::try_arc_from_new($var) {
+        match $crate::try_arc_from($var) {
             Some(c) => c,
             None => return $crate::panic::NullParameterOrDefault::value(),
         }
     };
 }
 
-pub(crate) fn try_box_from_new<C>(from: *mut C) -> Option<Box<C::RustType>>
+pub(crate) fn try_box_from<C>(from: *mut C) -> Option<Box<C::RustType>>
 where
     C: Castable<CastSource = BoxCastPtrMarker>,
 {
@@ -451,9 +451,9 @@ where
 
 #[doc(hidden)]
 #[macro_export]
-macro_rules! try_box_from_ptr_new {
+macro_rules! try_box_from_ptr {
     ( $var:ident ) => {
-        match $crate::try_box_from_new($var) {
+        match $crate::try_box_from($var) {
             Some(c) => c,
             None => return $crate::panic::NullParameterOrDefault::value(),
         }

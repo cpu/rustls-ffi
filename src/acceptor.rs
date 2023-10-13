@@ -12,8 +12,7 @@ use crate::rslice::{rustls_slice_bytes, rustls_str};
 use crate::server::rustls_server_config;
 use crate::{
     ffi_panic_boundary, free_box, rustls_result, set_boxed_mut_ptr, to_box, to_boxed_mut_ptr,
-    try_arc_from_ptr_new, try_callback, try_mut_from_ptr_new, try_ref_from_ptr_new,
-    BoxCastPtrMarker, Castable,
+    try_arc_from_ptr, try_callback, try_mut_from_ptr, try_ref_from_ptr, BoxCastPtrMarker, Castable,
 };
 use rustls_result::NullParameter;
 
@@ -120,7 +119,7 @@ impl rustls_acceptor {
         out_n: *mut size_t,
     ) -> rustls_io_result {
         ffi_panic_boundary! {
-            let acceptor: &mut Acceptor = try_mut_from_ptr_new!(acceptor);
+            let acceptor: &mut Acceptor = try_mut_from_ptr!(acceptor);
             if out_n.is_null() {
                 return rustls_io_result(EINVAL);
             }
@@ -176,7 +175,7 @@ impl rustls_acceptor {
         out_accepted: *mut *mut rustls_accepted,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let acceptor: &mut Acceptor = try_mut_from_ptr_new!(acceptor);
+            let acceptor: &mut Acceptor = try_mut_from_ptr!(acceptor);
             if out_accepted.is_null() {
                 return NullParameter
             }
@@ -218,7 +217,7 @@ impl rustls_accepted {
         accepted: *const rustls_accepted,
     ) -> rustls_str<'static> {
         ffi_panic_boundary! {
-            let accepted: &Option<Accepted> = try_ref_from_ptr_new!(accepted);
+            let accepted: &Option<Accepted> = try_ref_from_ptr!(accepted);
             let accepted = match accepted {
                 Some(a) => a,
                 None => return Default::default(),
@@ -259,7 +258,7 @@ impl rustls_accepted {
         i: usize,
     ) -> u16 {
         ffi_panic_boundary! {
-            let accepted: &Option<Accepted> = try_ref_from_ptr_new!(accepted);
+            let accepted: &Option<Accepted> = try_ref_from_ptr!(accepted);
             let accepted = match accepted {
                 Some(a) => a,
                 None => return 0,
@@ -297,7 +296,7 @@ impl rustls_accepted {
         i: usize,
     ) -> u16 {
         ffi_panic_boundary! {
-            let accepted: &Option<Accepted> = try_ref_from_ptr_new!(accepted);
+            let accepted: &Option<Accepted> = try_ref_from_ptr!(accepted);
             let accepted = match accepted {
                 Some(a) => a,
                 None => return 0,
@@ -340,7 +339,7 @@ impl rustls_accepted {
         i: usize,
     ) -> rustls_slice_bytes<'static> {
         ffi_panic_boundary! {
-            let accepted: &Option<Accepted> = try_ref_from_ptr_new!(accepted);
+            let accepted: &Option<Accepted> = try_ref_from_ptr!(accepted);
             let accepted = match accepted {
                 Some(a) => a,
                 None => return Default::default(),
@@ -398,12 +397,12 @@ impl rustls_accepted {
         out_conn: *mut *mut rustls_connection,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let accepted: &mut Option<Accepted> = try_mut_from_ptr_new!(accepted);
+            let accepted: &mut Option<Accepted> = try_mut_from_ptr!(accepted);
             let accepted = match accepted.take() {
                 Some(a) => a,
                 None => return rustls_result::AlreadyUsed,
             };
-            let config: Arc<ServerConfig> = try_arc_from_ptr_new!(config);
+            let config: Arc<ServerConfig> = try_arc_from_ptr!(config);
             match accepted.into_connection(config) {
                 Ok(built) => {
                     let wrapped = crate::connection::Connection::from_server(built);

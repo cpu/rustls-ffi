@@ -18,8 +18,8 @@ use crate::{
     error::{map_error, rustls_io_result, rustls_result},
     ffi_panic_boundary, free_box,
     io::{rustls_read_callback, rustls_write_callback},
-    try_callback, try_mut_from_ptr_new, try_ref_from_ptr_new, try_slice, userdata_push,
-    BoxCastPtrMarker, Castable,
+    try_callback, try_mut_from_ptr, try_ref_from_ptr, try_slice, userdata_push, BoxCastPtrMarker,
+    Castable,
 };
 
 use rustls_result::NullParameter;
@@ -111,7 +111,7 @@ impl rustls_connection {
         conn: *mut rustls_connection,
         userdata: *mut c_void,
     ) {
-        let conn: &mut Connection = try_mut_from_ptr_new!(conn);
+        let conn: &mut Connection = try_mut_from_ptr!(conn);
         conn.userdata = userdata;
     }
 
@@ -123,7 +123,7 @@ impl rustls_connection {
         conn: *mut rustls_connection,
         cb: rustls_log_callback,
     ) {
-        let conn: &mut Connection = try_mut_from_ptr_new!(conn);
+        let conn: &mut Connection = try_mut_from_ptr!(conn);
         ensure_log_registered();
         conn.log_callback = cb;
     }
@@ -146,7 +146,7 @@ impl rustls_connection {
         out_n: *mut size_t,
     ) -> rustls_io_result {
         ffi_panic_boundary! {
-            let conn: &mut Connection = try_mut_from_ptr_new!(conn);
+            let conn: &mut Connection = try_mut_from_ptr!(conn);
             if out_n.is_null() {
                 return rustls_io_result(EINVAL)
             }
@@ -183,7 +183,7 @@ impl rustls_connection {
         out_n: *mut size_t,
     ) -> rustls_io_result {
         ffi_panic_boundary! {
-            let conn: &mut Connection = try_mut_from_ptr_new!(conn);
+            let conn: &mut Connection = try_mut_from_ptr!(conn);
             if out_n.is_null() {
                 return rustls_io_result(EINVAL)
             }
@@ -220,7 +220,7 @@ impl rustls_connection {
         out_n: *mut size_t,
     ) -> rustls_io_result {
         ffi_panic_boundary! {
-            let conn: &mut Connection = try_mut_from_ptr_new!(conn);
+            let conn: &mut Connection = try_mut_from_ptr!(conn);
             if out_n.is_null() {
                 return rustls_io_result(EINVAL)
             }
@@ -248,7 +248,7 @@ impl rustls_connection {
         conn: *mut rustls_connection,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let conn: &mut Connection = try_mut_from_ptr_new!(conn);
+            let conn: &mut Connection = try_mut_from_ptr!(conn);
             let guard = match userdata_push(conn.userdata, conn.log_callback) {
                 Ok(g) => g,
                 Err(_) => return rustls_result::Panic,
@@ -268,7 +268,7 @@ impl rustls_connection {
     #[no_mangle]
     pub extern "C" fn rustls_connection_wants_read(conn: *const rustls_connection) -> bool {
         ffi_panic_boundary! {
-            let conn: &Connection = try_ref_from_ptr_new!(conn);
+            let conn: &Connection = try_ref_from_ptr!(conn);
             conn.wants_read()
         }
     }
@@ -277,7 +277,7 @@ impl rustls_connection {
     #[no_mangle]
     pub extern "C" fn rustls_connection_wants_write(conn: *const rustls_connection) -> bool {
         ffi_panic_boundary! {
-            let conn: &Connection = try_ref_from_ptr_new!(conn);
+            let conn: &Connection = try_ref_from_ptr!(conn);
             conn.wants_write()
         }
     }
@@ -286,7 +286,7 @@ impl rustls_connection {
     #[no_mangle]
     pub extern "C" fn rustls_connection_is_handshaking(conn: *const rustls_connection) -> bool {
         ffi_panic_boundary! {
-            let conn: &Connection = try_ref_from_ptr_new!(conn);
+            let conn: &Connection = try_ref_from_ptr!(conn);
             conn.is_handshaking()
         }
     }
@@ -299,7 +299,7 @@ impl rustls_connection {
     #[no_mangle]
     pub extern "C" fn rustls_connection_set_buffer_limit(conn: *mut rustls_connection, n: usize) {
         ffi_panic_boundary! {
-            let conn: &mut Connection = try_mut_from_ptr_new!(conn);
+            let conn: &mut Connection = try_mut_from_ptr!(conn);
             conn.set_buffer_limit(Some(n));
         }
     }
@@ -309,7 +309,7 @@ impl rustls_connection {
     #[no_mangle]
     pub extern "C" fn rustls_connection_send_close_notify(conn: *mut rustls_connection) {
         ffi_panic_boundary! {
-            let conn: &mut Connection = try_mut_from_ptr_new!(conn);
+            let conn: &mut Connection = try_mut_from_ptr!(conn);
             conn.send_close_notify();
         }
     }
@@ -329,7 +329,7 @@ impl rustls_connection {
         i: size_t,
     ) -> *const rustls_certificate {
         ffi_panic_boundary! {
-            let conn: &Connection = try_ref_from_ptr_new!(conn);
+            let conn: &Connection = try_ref_from_ptr!(conn);
             match conn.peer_certificates().and_then(|c| c.get(i)) {
                 Some(cert) => cert as *const Certificate as *const _,
                 None => null()
@@ -355,7 +355,7 @@ impl rustls_connection {
         protocol_out_len: *mut usize,
     ) {
         ffi_panic_boundary! {
-            let conn: &Connection = try_ref_from_ptr_new!(conn);
+            let conn: &Connection = try_ref_from_ptr!(conn);
             if protocol_out.is_null() || protocol_out_len.is_null() {
                 return
             }
@@ -382,7 +382,7 @@ impl rustls_connection {
         conn: *const rustls_connection,
     ) -> u16 {
         ffi_panic_boundary! {
-            let conn: &Connection = try_ref_from_ptr_new!(conn);
+            let conn: &Connection = try_ref_from_ptr!(conn);
             match conn.protocol_version() {
                 Some(p) => p.get_u16(),
                 _ => 0,
@@ -399,7 +399,7 @@ impl rustls_connection {
         conn: *const rustls_connection,
     ) -> *const rustls_supported_ciphersuite {
         ffi_panic_boundary! {
-            let conn: &Connection = try_ref_from_ptr_new!(conn);
+            let conn: &Connection = try_ref_from_ptr!(conn);
             let negotiated = match conn.negotiated_cipher_suite() {
                 Some(cs) => cs,
                 None => return null(),
@@ -431,7 +431,7 @@ impl rustls_connection {
         out_n: *mut size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let conn: &mut Connection = try_mut_from_ptr_new!(conn);
+            let conn: &mut Connection = try_mut_from_ptr!(conn);
             let write_buf: &[u8] = try_slice!(buf, count);
             if out_n.is_null() {
                 return NullParameter
@@ -467,7 +467,7 @@ impl rustls_connection {
         out_n: *mut size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let conn: &mut Connection = try_mut_from_ptr_new!(conn);
+            let conn: &mut Connection = try_mut_from_ptr!(conn);
             if buf.is_null() {
                 return NullParameter
             }
@@ -516,7 +516,7 @@ impl rustls_connection {
         out_n: *mut size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let conn: &mut Connection = try_mut_from_ptr_new!(conn);
+            let conn: &mut Connection = try_mut_from_ptr!(conn);
             if buf.is_null() || out_n.is_null() {
                 return NullParameter
             }

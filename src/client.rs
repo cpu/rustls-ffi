@@ -22,8 +22,8 @@ use crate::rslice::NulByte;
 use crate::rslice::{rustls_slice_bytes, rustls_slice_slice_bytes, rustls_str};
 use crate::{
     ffi_panic_boundary, free_arc, free_box, set_boxed_mut_ptr, to_arc_const_ptr, to_boxed_mut_ptr,
-    try_arc_from_ptr_new, try_box_from_ptr_new, try_mut_from_ptr_new, try_ref_from_ptr_new,
-    try_slice, userdata_get, ArcCastPtrMarker, BoxCastPtrMarker, Castable,
+    try_arc_from_ptr, try_box_from_ptr, try_mut_from_ptr, try_ref_from_ptr, try_slice,
+    userdata_get, ArcCastPtrMarker, BoxCastPtrMarker, Castable,
 };
 
 /// A client config being constructed. A builder can be modified by,
@@ -137,7 +137,7 @@ impl rustls_client_config_builder {
             let cipher_suites: &[*const rustls_supported_ciphersuite] = try_slice!(cipher_suites, cipher_suites_len);
             let mut cs_vec: Vec<SupportedCipherSuite> = Vec::new();
             for &cs in cipher_suites.iter() {
-                let cs = try_ref_from_ptr_new!(cs);
+                let cs = try_ref_from_ptr!(cs);
                 match ALL_CIPHER_SUITES.iter().find(|&acs| cs.eq(acs)) {
                     Some(scs) => cs_vec.push(*scs),
                     None => return InvalidParameter,
@@ -300,7 +300,7 @@ impl rustls_client_config_builder {
         callback: rustls_verify_server_cert_callback,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let config_builder = try_mut_from_ptr_new!(config_builder);
+            let config_builder = try_mut_from_ptr!(config_builder);
             let callback: VerifyCallback = match callback {
                 Some(cb) => cb,
                 None => return rustls_result::InvalidParameter,
@@ -324,8 +324,8 @@ impl rustls_client_config_builder {
         roots: *const rustls_root_cert_store,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let builder = try_mut_from_ptr_new!(config_builder);
-            let root_store: &RootCertStore = try_ref_from_ptr_new!(roots);
+            let builder = try_mut_from_ptr!(config_builder);
+            let root_store: &RootCertStore = try_ref_from_ptr!(roots);
             builder.verifier = Arc::new(rustls::client::WebPkiVerifier::new(root_store.clone(), None));
             rustls_result::Ok
         }
@@ -339,7 +339,7 @@ impl rustls_client_config_builder {
         filename: *const c_char,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let config_builder = try_mut_from_ptr_new!(config_builder);
+            let config_builder = try_mut_from_ptr!(config_builder);
             let filename: &CStr = unsafe {
                 if filename.is_null() {
                     return rustls_result::NullParameter;
@@ -393,7 +393,7 @@ impl rustls_client_config_builder {
         len: size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let config: &mut ClientConfigBuilder = try_mut_from_ptr_new!(builder);
+            let config: &mut ClientConfigBuilder = try_mut_from_ptr!(builder);
             let protocols: &[rustls_slice_bytes] = try_slice!(protocols, len);
 
             let mut vv: Vec<Vec<u8>> = Vec::with_capacity(protocols.len());
@@ -414,7 +414,7 @@ impl rustls_client_config_builder {
         enable: bool,
     ) {
         ffi_panic_boundary! {
-            let config: &mut ClientConfigBuilder = try_mut_from_ptr_new!(config);
+            let config: &mut ClientConfigBuilder = try_mut_from_ptr!(config);
             config.enable_sni = enable;
         }
     }
@@ -438,11 +438,11 @@ impl rustls_client_config_builder {
         certified_keys_len: size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let config: &mut ClientConfigBuilder = try_mut_from_ptr_new!(builder);
+            let config: &mut ClientConfigBuilder = try_mut_from_ptr!(builder);
             let keys_ptrs: &[*const rustls_certified_key] = try_slice!(certified_keys, certified_keys_len);
             let mut keys: Vec<Arc<CertifiedKey>> = Vec::new();
             for &key_ptr in keys_ptrs {
-                let certified_key: Arc<CertifiedKey> = try_arc_from_ptr_new!(key_ptr);
+                let certified_key: Arc<CertifiedKey> = try_arc_from_ptr!(key_ptr);
                 keys.push(certified_key);
             }
             config.cert_resolver = Some(Arc::new(ResolvesClientCertFromChoices { keys }));
@@ -483,7 +483,7 @@ impl rustls_client_config_builder {
         builder: *mut rustls_client_config_builder,
     ) -> *const rustls_client_config {
         ffi_panic_boundary! {
-            let builder: Box<ClientConfigBuilder> = try_box_from_ptr_new!(builder);
+            let builder: Box<ClientConfigBuilder> = try_box_from_ptr!(builder);
             let config = builder.base.with_custom_certificate_verifier(builder.verifier);
             let mut config = match builder.cert_resolver {
                 Some(r) => config.with_client_cert_resolver(r),
@@ -545,7 +545,7 @@ impl rustls_client_config {
             }
             CStr::from_ptr(server_name)
         };
-        let config: Arc<ClientConfig> = try_arc_from_ptr_new!(config);
+        let config: Arc<ClientConfig> = try_arc_from_ptr!(config);
         let server_name: &str = match server_name.to_str() {
             Ok(s) => s,
             Err(std::str::Utf8Error { .. }) => return rustls_result::InvalidDnsNameError,
@@ -587,7 +587,7 @@ mod tests {
         rustls_client_config_builder::rustls_client_config_builder_set_enable_sni(builder, false);
         let config = rustls_client_config_builder::rustls_client_config_builder_build(builder);
         {
-            let config2 = try_ref_from_ptr_new!(config);
+            let config2 = try_ref_from_ptr!(config);
             assert_eq!(config2.enable_sni, false);
             assert_eq!(config2.alpn_protocols, vec![h1, h2]);
         }
