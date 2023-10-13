@@ -292,6 +292,113 @@ mod tests {
     }
 }
 
+pub(crate) struct BoxCastPtrMarker;
+
+pub(crate) struct ArcCastPtrMarker;
+
+trait CastSourceMarker {}
+
+impl CastSourceMarker for BoxCastPtrMarker {}
+
+impl CastSourceMarker for ArcCastPtrMarker {}
+
+pub(crate) trait Castable {
+    type CastSource: CastSourceMarker;
+    type RustType;
+}
+
+pub(crate) fn cast_const_ptr<C>(ptr: *const C) -> *const C::RustType
+where
+    C: Castable,
+{
+    ptr as *const _
+}
+
+pub(crate) fn to_arc<C>(ptr: *const C) -> Option<Arc<C::RustType>>
+where
+    C: Castable<CastSource = ArcCastPtrMarker>,
+{
+    if ptr.is_null() {
+        return None;
+    }
+    let rs_typed = cast_const_ptr::<C>(ptr);
+    let r = unsafe { Arc::from_raw(rs_typed) };
+    let val = Arc::clone(&r);
+    mem::forget(r);
+    Some(val)
+}
+
+pub(crate) fn to_box<C>(ptr: *mut C) -> Option<Box<C::RustType>>
+where
+    C: Castable<CastSource = BoxCastPtrMarker>,
+{
+    if ptr.is_null() {
+        return None;
+    }
+    let rs_typed = cast_mut_ptr(ptr);
+    unsafe { Some(Box::from_raw(rs_typed)) }
+}
+
+pub(crate) fn free_arc<C>(ptr: *const C)
+where
+    C: Castable<CastSource = ArcCastPtrMarker>,
+{
+    if ptr.is_null() {
+        return;
+    }
+    let rs_typed = cast_const_ptr(ptr);
+    drop(unsafe { Arc::from_raw(rs_typed) });
+}
+
+pub(crate) fn free_box<C>(ptr: *mut C)
+where
+    C: Castable<CastSource = BoxCastPtrMarker>,
+{
+    to_box(ptr);
+}
+
+pub(crate) fn cast_mut_ptr<C>(ptr: *mut C) -> *mut C::RustType
+where
+    C: Castable<CastSource = BoxCastPtrMarker>,
+{
+    ptr as *mut _
+}
+
+pub(crate) fn to_boxed_mut_ptr<C>(src: C::RustType) -> *mut C
+where
+    C: Castable<CastSource = BoxCastPtrMarker>,
+{
+    Box::into_raw(Box::new(src)) as *mut _
+}
+
+pub(crate) fn set_boxed_mut_ptr<C>(dst: *mut *mut C, src: C::RustType)
+where
+    C: Castable<CastSource = BoxCastPtrMarker>,
+{
+    unsafe {
+        *dst = to_boxed_mut_ptr(src);
+    }
+}
+
+/// Turn a raw mut pointer into a mutable reference.
+pub(crate) fn try_from_mut_new<'a, C>(from: *mut C) -> Option<&'a mut C::RustType>
+where
+    C: Castable<CastSource = BoxCastPtrMarker>,
+{
+    unsafe { cast_mut_ptr(from).as_mut() }
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! try_mut_from_ptr_new {
+    ( $var:ident ) => {
+        match $crate::try_from_mut_new($var) {
+            Some(c) => c,
+            None => return $crate::panic::NullParameterOrDefault::value(),
+        }
+    };
+}
+
 /// CastPtr represents the relationship between a snake case type (like rustls_client_config)
 /// and the corresponding Rust type (like ClientConfig). For each matched pair of types, there
 /// should be an `impl CastPtr for foo_bar { RustTy = FooBar }`.
