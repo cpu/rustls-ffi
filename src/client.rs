@@ -21,8 +21,9 @@ use crate::error::{self, rustls_result};
 use crate::rslice::NulByte;
 use crate::rslice::{rustls_slice_bytes, rustls_slice_slice_bytes, rustls_str};
 use crate::{
-    ffi_panic_boundary, try_arc_from_ptr, try_box_from_ptr, try_mut_from_ptr, try_ref_from_ptr,
-    try_ref_from_ptr_new, try_slice, userdata_get, ArcCastPtr, BoxCastPtr, CastConstPtr, CastPtr,
+    ffi_panic_boundary, try_arc_from_ptr, try_arc_from_ptr_new, try_box_from_ptr, try_mut_from_ptr,
+    try_ref_from_ptr, try_ref_from_ptr_new, try_slice, userdata_get, ArcCastPtr, BoxCastPtr,
+    CastConstPtr, CastPtr,
 };
 
 /// A client config being constructed. A builder can be modified by,
@@ -443,7 +444,7 @@ impl rustls_client_config_builder {
             let keys_ptrs: &[*const rustls_certified_key] = try_slice!(certified_keys, certified_keys_len);
             let mut keys: Vec<Arc<CertifiedKey>> = Vec::new();
             for &key_ptr in keys_ptrs {
-                let certified_key: Arc<CertifiedKey> = try_arc_from_ptr!(key_ptr);
+                let certified_key: Arc<CertifiedKey> = try_arc_from_ptr_new!(key_ptr);
                 keys.push(certified_key);
             }
             config.cert_resolver = Some(Arc::new(ResolvesClientCertFromChoices { keys }));

@@ -29,8 +29,9 @@ use crate::session::{
     SessionStoreGetCallback, SessionStorePutCallback,
 };
 use crate::{
-    ffi_panic_boundary, try_arc_from_ptr, try_box_from_ptr, try_mut_from_ptr, try_ref_from_ptr,
-    try_ref_from_ptr_new, try_slice, userdata_get, ArcCastPtr, BoxCastPtr, CastConstPtr, CastPtr,
+    ffi_panic_boundary, try_arc_from_ptr, try_arc_from_ptr_new, try_box_from_ptr, try_mut_from_ptr,
+    try_ref_from_ptr, try_ref_from_ptr_new, try_slice, userdata_get, ArcCastPtr, BoxCastPtr,
+    CastConstPtr, CastPtr,
 };
 
 /// A server config being constructed. A builder can be modified by,
@@ -274,7 +275,7 @@ impl rustls_server_config_builder {
         let keys_ptrs: &[*const rustls_certified_key] = try_slice!(certified_keys, certified_keys_len);
         let mut keys: Vec<Arc<CertifiedKey>> = Vec::new();
         for &key_ptr in keys_ptrs {
-            let certified_key: Arc<CertifiedKey> = try_arc_from_ptr!(key_ptr);
+            let certified_key: Arc<CertifiedKey> = try_arc_from_ptr_new!(key_ptr);
             keys.push(certified_key);
         }
             builder.cert_resolver = Some(Arc::new(ResolvesServerCertFromChoices::new(&keys)));
@@ -539,7 +540,7 @@ impl ResolvesServerCert for ClientHelloResolver {
             Err(_) => return None,
         };
         let key_ptr: *const rustls_certified_key = unsafe { cb(userdata, &hello) };
-        let certified_key: &CertifiedKey = try_ref_from_ptr!(key_ptr);
+        let certified_key: &CertifiedKey = try_ref_from_ptr_new!(key_ptr);
         Some(Arc::new(certified_key.clone()))
     }
 }
@@ -618,7 +619,7 @@ pub extern "C" fn rustls_client_hello_select_certified_key(
         }
         let keys_ptrs: &[*const rustls_certified_key] = try_slice!(certified_keys, certified_keys_len);
         for &key_ptr in keys_ptrs {
-            let key_ref: &CertifiedKey = try_ref_from_ptr!(key_ptr);
+            let key_ref: &CertifiedKey = try_ref_from_ptr_new!(key_ptr);
             if key_ref.key.choose_scheme(&schemes).is_some() {
                 unsafe {
                     *out_key = key_ptr;

@@ -314,6 +314,13 @@ where
     ptr as *const _
 }
 
+pub(crate) fn to_arc_const_ptr<C>(src: C::RustType) -> *const C
+where
+    C: Castable,
+{
+    Arc::into_raw(Arc::new(src)) as *const _
+}
+
 pub(crate) fn to_arc<C>(ptr: *const C) -> Option<Arc<C::RustType>>
 where
     C: Castable<CastSource = ArcCastPtrMarker>,
@@ -411,6 +418,24 @@ where
 macro_rules! try_ref_from_ptr_new {
     ( $var:ident ) => {
         match $crate::try_from_new($var) {
+            Some(c) => c,
+            None => return $crate::panic::NullParameterOrDefault::value(),
+        }
+    };
+}
+
+pub(crate) fn try_arc_from_new<C>(from: *const C) -> Option<Arc<C::RustType>>
+where
+    C: Castable<CastSource = ArcCastPtrMarker>,
+{
+    to_arc(from)
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! try_arc_from_ptr_new {
+    ( $var:ident ) => {
+        match $crate::try_arc_from_new($var) {
             Some(c) => c,
             None => return $crate::panic::NullParameterOrDefault::value(),
         }

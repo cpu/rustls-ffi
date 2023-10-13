@@ -18,8 +18,9 @@ use rustls_pemfile::{certs, crls, pkcs8_private_keys, rsa_private_keys};
 use crate::error::{map_error, rustls_result};
 use crate::rslice::{rustls_slice_bytes, rustls_str};
 use crate::{
-    ffi_panic_boundary, try_box_from_ptr, try_mut_from_ptr, try_ref_from_ptr, try_ref_from_ptr_new,
-    try_slice, ArcCastPtr, ArcCastPtrMarker, BoxCastPtr, CastConstPtr, CastPtr, Castable,
+    ffi_panic_boundary, free_arc, to_arc_const_ptr, try_box_from_ptr, try_mut_from_ptr,
+    try_ref_from_ptr, try_ref_from_ptr_new, try_slice, ArcCastPtr, ArcCastPtrMarker, BoxCastPtr,
+    CastConstPtr, CastPtr, Castable,
 };
 use rustls_result::{AlreadyUsed, NullParameter};
 
@@ -264,11 +265,10 @@ pub struct rustls_certified_key {
     _private: [u8; 0],
 }
 
-impl CastPtr for rustls_certified_key {
+impl Castable for rustls_certified_key {
+    type CastSource = ArcCastPtrMarker;
     type RustType = CertifiedKey;
 }
-
-impl ArcCastPtr for rustls_certified_key {}
 
 impl rustls_certified_key {
     /// Build a `rustls_certified_key` from a certificate chain and a private key.
@@ -334,7 +334,7 @@ impl rustls_certified_key {
         i: size_t,
     ) -> *const rustls_certificate {
         ffi_panic_boundary! {
-            let certified_key: &CertifiedKey = try_ref_from_ptr!(certified_key);
+            let certified_key: &CertifiedKey = try_ref_from_ptr_new!(certified_key);
             match certified_key.cert.get(i) {
                 Some(cert) => cert as *const Certificate as *const _,
                 None => null()
@@ -360,7 +360,7 @@ impl rustls_certified_key {
                     None => return NullParameter,
                 }
             };
-            let certified_key: &CertifiedKey = try_ref_from_ptr!(certified_key);
+            let certified_key: &CertifiedKey = try_ref_from_ptr_new!(certified_key);
             let mut new_key = certified_key.clone();
             if !ocsp_response.is_null() {
                 let ocsp_slice = unsafe{ &*ocsp_response };
@@ -368,7 +368,7 @@ impl rustls_certified_key {
             } else {
                 new_key.ocsp = None;
             }
-            *cloned_key_out = ArcCastPtr::to_const_ptr(new_key);
+            *cloned_key_out = to_arc_const_ptr(new_key);
             rustls_result::Ok
         }
     }
@@ -382,7 +382,7 @@ impl rustls_certified_key {
     #[no_mangle]
     pub extern "C" fn rustls_certified_key_free(key: *const rustls_certified_key) {
         ffi_panic_boundary! {
-            rustls_certified_key::free(key);
+            free_arc(key);
         }
     }
 
