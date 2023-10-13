@@ -18,9 +18,9 @@ use rustls_pemfile::{certs, crls, pkcs8_private_keys, rsa_private_keys};
 use crate::error::{map_error, rustls_result};
 use crate::rslice::{rustls_slice_bytes, rustls_str};
 use crate::{
-    ffi_panic_boundary, free_arc, to_arc_const_ptr, try_box_from_ptr, try_mut_from_ptr,
-    try_ref_from_ptr, try_ref_from_ptr_new, try_slice, ArcCastPtr, ArcCastPtrMarker, BoxCastPtr,
-    CastConstPtr, CastPtr, Castable,
+    ffi_panic_boundary, free_arc, to_arc_const_ptr, to_boxed_mut_ptr, try_box_from_ptr,
+    try_box_from_ptr_new, try_mut_from_ptr, try_mut_from_ptr_new, try_ref_from_ptr_new, try_slice,
+    ArcCastPtr, ArcCastPtrMarker, BoxCastPtr, BoxCastPtrMarker, CastConstPtr, CastPtr, Castable,
 };
 use rustls_result::{AlreadyUsed, NullParameter};
 
@@ -445,11 +445,10 @@ pub struct rustls_root_cert_store {
     _private: [u8; 0],
 }
 
-impl CastPtr for rustls_root_cert_store {
+impl Castable for rustls_root_cert_store {
+    type CastSource = BoxCastPtrMarker;
     type RustType = RootCertStore;
 }
-
-impl BoxCastPtr for rustls_root_cert_store {}
 
 impl rustls_root_cert_store {
     /// Create a rustls_root_cert_store. Caller owns the memory and must
@@ -460,7 +459,7 @@ impl rustls_root_cert_store {
     pub extern "C" fn rustls_root_cert_store_new() -> *mut rustls_root_cert_store {
         ffi_panic_boundary! {
             let store = rustls::RootCertStore::empty();
-            BoxCastPtr::to_mut_ptr(store)
+            to_boxed_mut_ptr(store)
         }
     }
 
@@ -481,7 +480,7 @@ impl rustls_root_cert_store {
     ) -> rustls_result {
         ffi_panic_boundary! {
             let certs_pem: &[u8] = try_slice!(pem, pem_len);
-            let store: &mut RootCertStore = try_mut_from_ptr!(store);
+            let store: &mut RootCertStore = try_mut_from_ptr_new!(store);
 
             let certs_der = match rustls_pemfile::certs(&mut Cursor::new(certs_pem)) {
                 Ok(vv) => vv,
@@ -506,7 +505,7 @@ impl rustls_root_cert_store {
     #[no_mangle]
     pub extern "C" fn rustls_root_cert_store_free(store: *mut rustls_root_cert_store) {
         ffi_panic_boundary! {
-            let store = try_box_from_ptr!(store);
+            let store = try_box_from_ptr_new!(store);
             drop(store)
         }
     }
@@ -542,7 +541,7 @@ impl rustls_allow_any_authenticated_client_builder {
         store: *const rustls_root_cert_store,
     ) -> *mut rustls_allow_any_authenticated_client_builder {
         ffi_panic_boundary! {
-            let store: &RootCertStore = try_ref_from_ptr!(store);
+            let store: &RootCertStore = try_ref_from_ptr_new!(store);
             let client_cert_verifier = Some(AllowAnyAuthenticatedClient::new(store.clone()));
             BoxCastPtr::to_mut_ptr(client_cert_verifier)
         }
@@ -688,7 +687,7 @@ impl rustls_allow_any_anonymous_or_authenticated_client_builder {
         store: *const rustls_root_cert_store,
     ) -> *mut rustls_allow_any_anonymous_or_authenticated_client_builder {
         ffi_panic_boundary! {
-            let store: &RootCertStore = try_ref_from_ptr!(store);
+            let store: &RootCertStore = try_ref_from_ptr_new!(store);
             let client_cert_verifier = Some(AllowAnyAnonymousOrAuthenticatedClient::new(store.clone()));
             BoxCastPtr::to_mut_ptr(client_cert_verifier)
         }

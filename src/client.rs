@@ -327,7 +327,7 @@ impl rustls_client_config_builder {
     ) -> rustls_result {
         ffi_panic_boundary! {
             let builder = try_mut_from_ptr!(config_builder);
-            let root_store: &RootCertStore = try_ref_from_ptr!(roots);
+            let root_store: &RootCertStore = try_ref_from_ptr_new!(roots);
             builder.verifier = Arc::new(rustls::client::WebPkiVerifier::new(root_store.clone(), None));
             rustls_result::Ok
         }
