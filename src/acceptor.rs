@@ -12,8 +12,8 @@ use crate::rslice::{rustls_slice_bytes, rustls_str};
 use crate::server::rustls_server_config;
 use crate::{
     ffi_panic_boundary, free_box, rustls_result, set_boxed_mut_ptr, to_box, to_boxed_mut_ptr,
-    try_arc_from_ptr, try_callback, try_mut_from_ptr_new, try_ref_from_ptr_new, BoxCastPtr,
-    BoxCastPtrMarker, Castable,
+    try_arc_from_ptr, try_callback, try_mut_from_ptr_new, try_ref_from_ptr_new, BoxCastPtrMarker,
+    Castable,
 };
 use rustls_result::NullParameter;
 
@@ -407,7 +407,7 @@ impl rustls_accepted {
             match accepted.into_connection(config) {
                 Ok(built) => {
                     let wrapped = crate::connection::Connection::from_server(built);
-                    BoxCastPtr::set_mut_ptr(out_conn, wrapped);
+                    set_boxed_mut_ptr(out_conn, wrapped);
                     rustls_result::Ok
                 },
                 Err(e) => map_error(e),

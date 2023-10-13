@@ -23,7 +23,7 @@ use crate::rslice::{rustls_slice_bytes, rustls_slice_slice_bytes, rustls_str};
 use crate::{
     ffi_panic_boundary, free_arc, free_box, set_boxed_mut_ptr, to_arc_const_ptr, to_boxed_mut_ptr,
     try_arc_from_ptr_new, try_box_from_ptr_new, try_mut_from_ptr_new, try_ref_from_ptr_new,
-    try_slice, userdata_get, ArcCastPtrMarker, BoxCastPtr, BoxCastPtrMarker, Castable,
+    try_slice, userdata_get, ArcCastPtrMarker, BoxCastPtrMarker, Castable,
 };
 
 /// A client config being constructed. A builder can be modified by,
@@ -560,7 +560,7 @@ impl rustls_client_config {
         // to the caller. After this point, we must return rustls_result::Ok so the
         // caller knows it is responsible for this memory.
         let c = Connection::from_client(client);
-        BoxCastPtr::set_mut_ptr(conn_out, c);
+        set_boxed_mut_ptr(conn_out, c);
         rustls_result::Ok
         }
     }

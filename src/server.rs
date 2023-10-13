@@ -29,9 +29,9 @@ use crate::session::{
     SessionStoreGetCallback, SessionStorePutCallback,
 };
 use crate::{
-    ffi_panic_boundary, try_arc_from_ptr, try_arc_from_ptr_new, try_box_from_ptr, try_mut_from_ptr,
-    try_ref_from_ptr, try_ref_from_ptr_new, try_slice, userdata_get, ArcCastPtr, BoxCastPtr,
-    CastConstPtr, CastPtr,
+    ffi_panic_boundary, set_boxed_mut_ptr, try_arc_from_ptr, try_arc_from_ptr_new,
+    try_box_from_ptr, try_mut_from_ptr, try_ref_from_ptr, try_ref_from_ptr_new, try_slice,
+    userdata_get, ArcCastPtr, BoxCastPtr, CastConstPtr, CastPtr,
 };
 
 /// A server config being constructed. A builder can be modified by,
@@ -345,7 +345,7 @@ impl rustls_server_config {
             // to the caller. After this point, we must return rustls_result::Ok so the
             // caller knows it is responsible for this memory.
             let c = Connection::from_server(server_connection);
-            BoxCastPtr::set_mut_ptr(conn_out, c);
+            set_boxed_mut_ptr(conn_out, c);
             rustls_result::Ok
         }
     }
@@ -366,7 +366,7 @@ pub extern "C" fn rustls_server_connection_get_server_name(
     out_n: *mut size_t,
 ) -> rustls_result {
     ffi_panic_boundary! {
-        let conn: &Connection = try_ref_from_ptr!(conn);
+        let conn: &Connection = try_ref_from_ptr_new!(conn);
         if buf.is_null() {
             return NullParameter
         }
