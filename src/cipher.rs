@@ -67,7 +67,8 @@ pub struct rustls_supported_ciphersuite {
     _private: [u8; 0],
 }
 
-impl CastPtr for rustls_supported_ciphersuite {
+impl Castable for rustls_supported_ciphersuite {
+    type CastSource = ArcCastPtrMarker;
     type RustType = SupportedCipherSuite;
 }
 
@@ -79,7 +80,7 @@ impl rustls_supported_ciphersuite {
     pub extern "C" fn rustls_supported_ciphersuite_get_suite(
         supported_ciphersuite: *const rustls_supported_ciphersuite,
     ) -> u16 {
-        let supported_ciphersuite = try_ref_from_ptr!(supported_ciphersuite);
+        let supported_ciphersuite = try_ref_from_ptr_new!(supported_ciphersuite);
         match supported_ciphersuite {
             rustls::SupportedCipherSuite::Tls12(sc) => &sc.common,
             rustls::SupportedCipherSuite::Tls13(sc) => &sc.common,
@@ -97,7 +98,7 @@ impl rustls_supported_ciphersuite {
 pub extern "C" fn rustls_supported_ciphersuite_get_name(
     supported_ciphersuite: *const rustls_supported_ciphersuite,
 ) -> rustls_str<'static> {
-    let supported_ciphersuite = try_ref_from_ptr!(supported_ciphersuite);
+    let supported_ciphersuite: &SupportedCipherSuite = try_ref_from_ptr_new!(supported_ciphersuite);
     let s = supported_ciphersuite.suite().as_str().unwrap_or("");
     match rustls_str::try_from(s) {
         Ok(s) => s,
@@ -214,7 +215,7 @@ mod tests {
             .iter()
             .zip(unsafe { RUSTLS_ALL_CIPHER_SUITES }.iter().copied())
         {
-            let ffi_cipher_suite = try_ref_from_ptr!(ffi);
+            let ffi_cipher_suite = try_ref_from_ptr_new!(ffi);
             assert_eq!(original, ffi_cipher_suite);
         }
     }
@@ -229,7 +230,7 @@ mod tests {
             .iter()
             .zip(unsafe { RUSTLS_DEFAULT_CIPHER_SUITES }.iter().copied())
         {
-            let ffi_cipher_suite = try_ref_from_ptr!(ffi);
+            let ffi_cipher_suite = try_ref_from_ptr_new!(ffi);
             assert_eq!(original, ffi_cipher_suite);
         }
     }

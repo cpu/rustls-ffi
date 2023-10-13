@@ -30,7 +30,7 @@ use crate::session::{
 };
 use crate::{
     ffi_panic_boundary, try_arc_from_ptr, try_box_from_ptr, try_mut_from_ptr, try_ref_from_ptr,
-    try_slice, userdata_get, ArcCastPtr, BoxCastPtr, CastConstPtr, CastPtr,
+    try_ref_from_ptr_new, try_slice, userdata_get, ArcCastPtr, BoxCastPtr, CastConstPtr, CastPtr,
 };
 
 /// A server config being constructed. A builder can be modified by,
@@ -123,7 +123,7 @@ impl rustls_server_config_builder {
             let cipher_suites: &[*const rustls_supported_ciphersuite] = try_slice!(cipher_suites, cipher_suites_len);
             let mut cs_vec: Vec<SupportedCipherSuite> = Vec::new();
             for &cs in cipher_suites.iter() {
-                let cs = try_ref_from_ptr!(cs);
+                let cs = try_ref_from_ptr_new!(cs);
                 match ALL_CIPHER_SUITES.iter().find(|&acs| cs.eq(acs)) {
                     Some(scs) => cs_vec.push(*scs),
                     None => return InvalidParameter,
