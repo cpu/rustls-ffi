@@ -30,9 +30,8 @@ use crate::session::{
 };
 use crate::{
     ffi_panic_boundary, free_arc, free_box, set_boxed_mut_ptr, to_arc_const_ptr, to_boxed_mut_ptr,
-    try_arc_from_ptr_new, try_box_from_ptr_new, try_mut_from_ptr_new, try_ref_from_ptr,
-    try_ref_from_ptr_new, try_slice, userdata_get, ArcCastPtrMarker, BoxCastPtrMarker, CastPtr,
-    Castable,
+    try_arc_from_ptr_new, try_box_from_ptr_new, try_mut_from_ptr_new, try_ref_from_ptr_new,
+    try_slice, userdata_get, ArcCastPtrMarker, BoxCastPtrMarker, Castable,
 };
 
 /// A server config being constructed. A builder can be modified by,
@@ -453,7 +452,8 @@ pub struct rustls_client_hello<'a> {
     alpn: *const rustls_slice_slice_bytes<'a>,
 }
 
-impl<'a> CastPtr for rustls_client_hello<'a> {
+impl<'a> Castable for rustls_client_hello<'a> {
+    type CastSource = ArcCastPtrMarker;
     type RustType = rustls_client_hello<'a>;
 }
 
@@ -611,7 +611,7 @@ pub extern "C" fn rustls_client_hello_select_certified_key(
     out_key: *mut *const rustls_certified_key,
 ) -> rustls_result {
     ffi_panic_boundary! {
-        let hello = try_ref_from_ptr!(hello);
+        let hello = try_ref_from_ptr_new!(hello);
         let schemes: Vec<SignatureScheme> = sigschemes(try_slice!(hello.signature_schemes.data, hello.signature_schemes.len));
         if out_key.is_null() {
             return NullParameter
