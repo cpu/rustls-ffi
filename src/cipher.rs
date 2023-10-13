@@ -605,11 +605,10 @@ pub struct rustls_allow_any_authenticated_client_verifier {
     _private: [u8; 0],
 }
 
-impl CastConstPtr for rustls_allow_any_authenticated_client_verifier {
+impl Castable for rustls_allow_any_authenticated_client_verifier {
+    type CastSource = ArcCastPtrMarker;
     type RustType = AllowAnyAuthenticatedClient;
 }
-
-impl ArcCastPtr for rustls_allow_any_authenticated_client_verifier {}
 
 impl rustls_allow_any_authenticated_client_verifier {
     /// Create a new allow any authenticated client certificate verifier from a builder.
@@ -650,7 +649,7 @@ impl rustls_allow_any_authenticated_client_verifier {
         verifier: *const rustls_allow_any_authenticated_client_verifier,
     ) {
         ffi_panic_boundary! {
-            rustls_allow_any_authenticated_client_verifier::free(verifier);
+            free_arc(verifier);
         }
     }
 }
