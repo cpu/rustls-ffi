@@ -29,9 +29,10 @@ use crate::session::{
     SessionStoreGetCallback, SessionStorePutCallback,
 };
 use crate::{
-    ffi_panic_boundary, set_boxed_mut_ptr, try_arc_from_ptr, try_arc_from_ptr_new,
-    try_box_from_ptr, try_mut_from_ptr, try_ref_from_ptr, try_ref_from_ptr_new, try_slice,
-    userdata_get, ArcCastPtr, BoxCastPtr, CastConstPtr, CastPtr,
+    ffi_panic_boundary, free_box, set_boxed_mut_ptr, to_boxed_mut_ptr, try_arc_from_ptr,
+    try_arc_from_ptr_new, try_box_from_ptr_new, try_mut_from_ptr_new, try_ref_from_ptr,
+    try_ref_from_ptr_new, try_slice, userdata_get, ArcCastPtr, BoxCastPtr, BoxCastPtrMarker,
+    CastConstPtr, CastPtr, Castable,
 };
 
 /// A server config being constructed. A builder can be modified by,
@@ -56,11 +57,10 @@ pub(crate) struct ServerConfigBuilder {
     ignore_client_order: Option<bool>,
 }
 
-impl CastPtr for rustls_server_config_builder {
+impl Castable for rustls_server_config_builder {
+    type CastSource = BoxCastPtrMarker;
     type RustType = ServerConfigBuilder;
 }
-
-impl BoxCastPtr for rustls_server_config_builder {}
 
 /// A server config that is done being constructed and is now read-only.
 /// Under the hood, this object corresponds to an `Arc<ServerConfig>`.
@@ -94,7 +94,7 @@ impl rustls_server_config_builder {
                            alpn_protocols: vec![],
                            ignore_client_order: None,
                        };
-                BoxCastPtr::to_mut_ptr(builder)
+            to_boxed_mut_ptr(builder)
         }
     }
 
@@ -156,7 +156,7 @@ impl rustls_server_config_builder {
                 alpn_protocols: vec![],
                 ignore_client_order: None,
             };
-            BoxCastPtr::set_mut_ptr(builder_out, builder);
+            set_boxed_mut_ptr(builder_out, builder);
             rustls_result::Ok
         }
     }
@@ -171,7 +171,7 @@ impl rustls_server_config_builder {
         verifier: *const rustls_allow_any_authenticated_client_verifier,
     ) {
         ffi_panic_boundary! {
-        let builder: &mut ServerConfigBuilder = try_mut_from_ptr!(builder);
+        let builder: &mut ServerConfigBuilder = try_mut_from_ptr_new!(builder);
         let verifier: Arc<AllowAnyAuthenticatedClient> = try_arc_from_ptr_new!(verifier);
         builder.verifier = verifier;
         }
@@ -187,7 +187,7 @@ impl rustls_server_config_builder {
         verifier: *const rustls_allow_any_anonymous_or_authenticated_client_verifier,
     ) {
         ffi_panic_boundary! {
-            let builder: &mut ServerConfigBuilder = try_mut_from_ptr!(builder);
+            let builder: &mut ServerConfigBuilder = try_mut_from_ptr_new!(builder);
             let verifier: Arc<AllowAnyAnonymousOrAuthenticatedClient> = try_arc_from_ptr_new!(verifier);
 
             builder.verifier = verifier;
@@ -202,7 +202,7 @@ impl rustls_server_config_builder {
     #[no_mangle]
     pub extern "C" fn rustls_server_config_builder_free(config: *mut rustls_server_config_builder) {
         ffi_panic_boundary! {
-            BoxCastPtr::to_box(config);
+            free_box(config);
         }
     }
 
@@ -216,7 +216,7 @@ impl rustls_server_config_builder {
         ignore: bool,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let config: &mut ServerConfigBuilder = try_mut_from_ptr!(builder);
+            let config: &mut ServerConfigBuilder = try_mut_from_ptr_new!(builder);
             config.ignore_client_order = Some(ignore);
             rustls_result::Ok
         }
@@ -239,7 +239,7 @@ impl rustls_server_config_builder {
         len: size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let config: &mut ServerConfigBuilder = try_mut_from_ptr!(builder);
+            let config: &mut ServerConfigBuilder = try_mut_from_ptr_new!(builder);
             let protocols: &[rustls_slice_bytes] = try_slice!(protocols, len);
 
             let mut vv: Vec<Vec<u8>> = Vec::new();
@@ -271,7 +271,7 @@ impl rustls_server_config_builder {
         certified_keys_len: size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
-        let builder: &mut ServerConfigBuilder = try_mut_from_ptr!(builder);
+        let builder: &mut ServerConfigBuilder = try_mut_from_ptr_new!(builder);
         let keys_ptrs: &[*const rustls_certified_key] = try_slice!(certified_keys, certified_keys_len);
         let mut keys: Vec<Arc<CertifiedKey>> = Vec::new();
         for &key_ptr in keys_ptrs {
@@ -290,7 +290,7 @@ impl rustls_server_config_builder {
         builder: *mut rustls_server_config_builder,
     ) -> *const rustls_server_config {
         ffi_panic_boundary! {
-            let builder = try_box_from_ptr!(builder);
+            let builder = try_box_from_ptr_new!(builder);
             let base = builder.base.with_client_cert_verifier(builder.verifier);
             let mut config = if let Some(r) = builder.cert_resolver {
                 base.with_cert_resolver(r)
@@ -576,7 +576,7 @@ impl rustls_server_config_builder {
                 Some(cb) => cb,
                 None => return rustls_result::NullParameter,
             };
-            let builder: &mut ServerConfigBuilder = try_mut_from_ptr!(builder);
+            let builder: &mut ServerConfigBuilder = try_mut_from_ptr_new!(builder);
             builder.cert_resolver = Some(Arc::new(ClientHelloResolver::new(
                 callback
             )));
@@ -654,7 +654,7 @@ impl rustls_server_config_builder {
                 Some(cb) => cb,
                 None => return rustls_result::NullParameter,
             };
-            let builder: &mut ServerConfigBuilder = try_mut_from_ptr!(builder);
+            let builder: &mut ServerConfigBuilder = try_mut_from_ptr_new!(builder);
             builder.session_storage = Some(Arc::new(SessionStoreBroker::new(
                 get_cb, put_cb
             )));
