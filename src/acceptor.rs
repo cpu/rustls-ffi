@@ -11,8 +11,9 @@ use crate::io::{rustls_read_callback, CallbackReader, ReadCallback};
 use crate::rslice::{rustls_slice_bytes, rustls_str};
 use crate::server::rustls_server_config;
 use crate::{
-    ffi_panic_boundary, rustls_result, try_arc_from_ptr, try_callback, try_mut_from_ptr,
-    try_ref_from_ptr, BoxCastPtr, CastPtr,
+    ffi_panic_boundary, rustls_result, to_box, to_boxed_mut_ptr, try_arc_from_ptr, try_callback,
+    try_mut_from_ptr, try_mut_from_ptr_new, try_ref_from_ptr, BoxCastPtr, BoxCastPtrMarker,
+    CastPtr, Castable,
 };
 use rustls_result::NullParameter;
 
@@ -42,11 +43,18 @@ pub struct rustls_acceptor {
     _private: [u8; 0],
 }
 
+impl Castable for rustls_acceptor {
+    type CastSource = BoxCastPtrMarker;
+    type RustType = Acceptor;
+}
+
+/*
 impl CastPtr for rustls_acceptor {
     type RustType = Acceptor;
 }
 
 impl BoxCastPtr for rustls_acceptor {}
+ */
 
 /// A parsed ClientHello produced by a rustls_acceptor. It is used to check
 /// server name indication (SNI), ALPN protocols, signature schemes, and
@@ -70,7 +78,7 @@ impl rustls_acceptor {
     #[no_mangle]
     pub extern "C" fn rustls_acceptor_new() -> *mut rustls_acceptor {
         ffi_panic_boundary! {
-            BoxCastPtr::to_mut_ptr(Acceptor::default())
+            to_boxed_mut_ptr(Acceptor::default())
         }
     }
 
@@ -84,7 +92,7 @@ impl rustls_acceptor {
     #[no_mangle]
     pub extern "C" fn rustls_acceptor_free(acceptor: *mut rustls_acceptor) {
         ffi_panic_boundary! {
-            BoxCastPtr::to_box(acceptor);
+            to_box(acceptor);
         }
     }
 
@@ -121,7 +129,7 @@ impl rustls_acceptor {
         out_n: *mut size_t,
     ) -> rustls_io_result {
         ffi_panic_boundary! {
-            let acceptor: &mut Acceptor = try_mut_from_ptr!(acceptor);
+            let acceptor: &mut Acceptor = try_mut_from_ptr_new!(acceptor);
             if out_n.is_null() {
                 return rustls_io_result(EINVAL);
             }
@@ -177,7 +185,7 @@ impl rustls_acceptor {
         out_accepted: *mut *mut rustls_accepted,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let acceptor: &mut Acceptor = try_mut_from_ptr!(acceptor);
+            let acceptor: &mut Acceptor = try_mut_from_ptr_new!(acceptor);
             if out_accepted.is_null() {
                 return NullParameter
             }
