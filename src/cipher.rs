@@ -98,7 +98,7 @@ impl rustls_supported_ciphersuite {
 pub extern "C" fn rustls_supported_ciphersuite_get_name(
     supported_ciphersuite: *const rustls_supported_ciphersuite,
 ) -> rustls_str<'static> {
-    let supported_ciphersuite: &SupportedCipherSuite = try_ref_from_ptr_new!(supported_ciphersuite);
+    let supported_ciphersuite = try_ref_from_ptr_new!(supported_ciphersuite);
     let s = supported_ciphersuite.suite().as_str().unwrap_or("");
     match rustls_str::try_from(s) {
         Ok(s) => s,
