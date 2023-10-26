@@ -33,7 +33,6 @@ log = "0.4.17"
 
 [lib]
 name = "rustls_ffi"
-crate-type = ["lib", "staticlib"]
 
 [dev-dependencies]
 regex = "1.9.6"
