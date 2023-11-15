@@ -756,6 +756,7 @@ impl rustls_web_pki_client_cert_verifier_builder {
 
     /// Allow unauthenticated anonymous clients in addition to those that present a client
     /// certificate that chains to one of the verifier's configured trust anchors.
+    #[no_mangle]
     pub extern "C" fn rustls_web_pki_client_cert_verifier_builder_allow_unauthenticated(
         builder: *mut rustls_web_pki_client_cert_verifier_builder,
     ) -> rustls_result {
