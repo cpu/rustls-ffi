@@ -6,7 +6,6 @@ use std::slice;
 use std::sync::Arc;
 
 use libc::size_t;
-use rustls::crypto::ring::ALL_CIPHER_SUITES;
 use rustls::server::danger::ClientCertVerifier;
 use rustls::server::{
     ClientHello, ResolvesServerCert, ServerConfig, ServerConnection, StoresServerSessions,
@@ -19,6 +18,7 @@ use crate::cipher::{
     rustls_certified_key, rustls_client_cert_verifier, rustls_supported_ciphersuite,
 };
 use crate::connection::{rustls_connection, Connection};
+use crate::crypto::{rustls_crypto_provider, ALL_CIPHER_SUITES, DEFAULT_CRYPTO_PROVIDER};
 use crate::error::rustls_result::{InvalidParameter, NullParameter};
 use crate::error::{map_error, rustls_result};
 use crate::rslice::{rustls_slice_bytes, rustls_slice_slice_bytes, rustls_slice_u16, rustls_str};
@@ -78,18 +78,40 @@ impl rustls_server_config_builder {
     /// Create a rustls_server_config_builder. Caller owns the memory and must
     /// eventually call rustls_server_config_builder_build, then free the
     /// resulting rustls_server_config. This uses rustls safe default values
-    /// for the cipher suites, key exchange groups and protocol versions.
+    /// for crypto provider, the cipher suites, key exchange groups and protocol versions.
     #[no_mangle]
     pub extern "C" fn rustls_server_config_builder_new() -> *mut rustls_server_config_builder {
         ffi_panic_boundary! {
             let builder = ServerConfigBuilder {
-                           base: rustls::ServerConfig::builder().with_safe_defaults(),
-                           verifier: WebPkiClientVerifier::no_client_auth(),
-                           cert_resolver: None,
-                           session_storage: None,
-                           alpn_protocols: vec![],
-                           ignore_client_order: None,
-                       };
+                base: rustls::ServerConfig::builder_with_provider(DEFAULT_CRYPTO_PROVIDER.provider).with_safe_defaults(),
+                verifier: WebPkiClientVerifier::no_client_auth(),
+                cert_resolver: None,
+                session_storage: None,
+                alpn_protocols: vec![],
+                ignore_client_order: None,
+            };
+            to_boxed_mut_ptr(builder)
+        }
+    }
+
+    /// Create a rustls_server_config_builder. Caller owns the memory and must
+    /// eventually call rustls_server_config_builder_build, then free the
+    /// resulting rustls_server_config. This uses the specified crypto provider and
+    /// its safe default value for cipher suites, key exchange groups and protocol versions.
+    #[no_mangle]
+    pub extern "C" fn rustls_server_config_builder_new_with_provider(
+        provider: *const rustls_crypto_provider,
+    ) -> *mut rustls_server_config_builder {
+        ffi_panic_boundary! {
+            let provider = try_clone_arc!(provider);
+            let builder = ServerConfigBuilder {
+                base: rustls::ServerConfig::builder_with_provider(provider.provider).with_safe_defaults(),
+                verifier: WebPkiClientVerifier::no_client_auth(),
+                cert_resolver: None,
+                session_storage: None,
+                alpn_protocols: vec![],
+                ignore_client_order: None,
+            };
             to_boxed_mut_ptr(builder)
         }
     }
@@ -138,7 +160,10 @@ impl rustls_server_config_builder {
                 }
             }
 
-            let result = rustls::ServerConfig::builder().with_cipher_suites(&cs_vec).with_safe_default_kx_groups().with_protocol_versions(&versions);
+            let result = rustls::ServerConfig::builder_with_provider(DEFAULT_CRYPTO_PROVIDER.provider)
+                .with_cipher_suites(&cs_vec)
+                .with_safe_default_kx_groups()
+                .with_protocol_versions(&versions);
             let base = match result {
                 Ok(new) => new,
                 Err(_) => return rustls_result::InvalidParameter,

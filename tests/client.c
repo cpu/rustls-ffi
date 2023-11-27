@@ -411,8 +411,16 @@ main(int argc, const char **argv)
   /* Set this global variable for logging purposes. */
   programname = "client";
 
+#if defined(DEFINE_AWS_LC_RS)
+  const struct rustls_crypto_provider *crypto_provider =
+    rustls_crypto_provider_aws_lc_rs_new();
+#else
+  const struct rustls_crypto_provider *crypto_provider =
+    rustls_crypto_provider_ring_new();
+#endif
   struct rustls_client_config_builder *config_builder =
-    rustls_client_config_builder_new();
+    rustls_client_config_builder_new_with_provider(crypto_provider);
+  ;
   struct rustls_root_cert_store_builder *server_cert_root_store_builder = NULL;
   const struct rustls_root_cert_store *server_cert_root_store = NULL;
   const struct rustls_client_config *client_config = NULL;
@@ -501,6 +509,7 @@ main(int argc, const char **argv)
   ret = 0;
 
 cleanup:
+  rustls_crypto_provider_free(crypto_provider);
   rustls_root_cert_store_builder_free(server_cert_root_store_builder);
   rustls_root_cert_store_free(server_cert_root_store);
   rustls_web_pki_server_cert_verifier_builder_free(

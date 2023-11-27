@@ -4,15 +4,14 @@ use std::{ptr::null_mut, slice};
 
 use libc::{size_t, EINVAL, EIO};
 use pki_types::CertificateDer;
-use rustls::crypto::ring::ALL_CIPHER_SUITES;
 use rustls::{ClientConnection, ServerConnection, SupportedCipherSuite};
 
+use crate::crypto::ALL_CIPHER_SUITES;
 use crate::io::{
     rustls_write_vectored_callback, CallbackReader, CallbackWriter, ReadCallback,
     VectoredCallbackWriter, VectoredWriteCallback, WriteCallback,
 };
 use crate::log::{ensure_log_registered, rustls_log_callback};
-
 use crate::{
     cipher::{rustls_certificate, rustls_supported_ciphersuite},
     error::{map_error, rustls_io_result, rustls_result},

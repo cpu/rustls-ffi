@@ -207,6 +207,8 @@ typedef struct rustls_client_config_builder rustls_client_config_builder;
 
 typedef struct rustls_connection rustls_connection;
 
+typedef struct rustls_crypto_provider rustls_crypto_provider;
+
 /**
  * An alias for `struct iovec` from uio.h (on Unix) or `WSABUF` on Windows. You should cast
  * `const struct rustls_iovec *` to `const struct iovec *` on Unix, or `const *LPWSABUF`
@@ -1196,13 +1198,25 @@ void rustls_server_cert_verifier_free(struct rustls_server_cert_verifier *verifi
  * Create a rustls_client_config_builder. Caller owns the memory and must
  * eventually call rustls_client_config_builder_build, then free the
  * resulting rustls_client_config.
- * This uses rustls safe default values
- * for the cipher suites, key exchange groups and protocol versions.
+ * This uses rustls safe default values for the crypto provider,
+ * cipher suites, key exchange groups and protocol versions.
  * This starts out with no trusted roots.
  * Caller must add roots with rustls_client_config_builder_load_roots_from_file
  * or provide a custom verifier.
  */
 struct rustls_client_config_builder *rustls_client_config_builder_new(void);
+
+/**
+ * Create a rustls_client_config_builder. Caller owns the memory and must
+ * eventually call rustls_client_config_builder_build, then free the
+ * resulting rustls_client_config.
+ * This uses the specified crypto provider, and its safe default values for
+ * cipher suites, key exchange groups and protocol versions.
+ * This starts out with no trusted roots.
+ * Caller must add roots with rustls_client_config_builder_load_roots_from_file
+ * or provide a custom verifier.
+ */
+struct rustls_client_config_builder *rustls_client_config_builder_new_with_provider(const struct rustls_crypto_provider *provider);
 
 /**
  * Create a rustls_client_config_builder. Caller owns the memory and must
@@ -1559,6 +1573,27 @@ rustls_result rustls_connection_read_2(struct rustls_connection *conn,
  */
 void rustls_connection_free(struct rustls_connection *conn);
 
+#if defined(DEFINE_RING)
+const struct rustls_crypto_provider *rustls_crypto_provider_ring_new(void);
+#endif
+
+#if defined(DEFINE_AWS_LC_RS)
+const struct rustls_crypto_provider *rustls_crypto_provider_aws_lc_rs_new(void);
+#endif
+
+void rustls_crypto_provider_free(const struct rustls_crypto_provider *provider);
+
+/**
+ * Create a `rustls_root_cert_store_builder`.
+ *
+ * Caller owns the memory and may free it with `rustls_root_cert_store_free`, regardless of
+ * whether `rustls_root_cert_store_builder_build` was called.
+ *
+ * If you wish to abandon the builder without calling `rustls_root_cert_store_builder_build`,
+ * it must be freed with `rustls_root_cert_store_builder_free`.
+ */
+struct rustls_root_cert_store_builder *rustls_root_cert_store_builder_new(void);
+
 /**
  * After a rustls function returns an error, you may call
  * this to get a pointer to a buffer containing a detailed error
@@ -1605,9 +1640,17 @@ struct rustls_str rustls_slice_str_get(const struct rustls_slice_str *input, siz
  * Create a rustls_server_config_builder. Caller owns the memory and must
  * eventually call rustls_server_config_builder_build, then free the
  * resulting rustls_server_config. This uses rustls safe default values
- * for the cipher suites, key exchange groups and protocol versions.
+ * for crypto provider, the cipher suites, key exchange groups and protocol versions.
  */
 struct rustls_server_config_builder *rustls_server_config_builder_new(void);
+
+/**
+ * Create a rustls_server_config_builder. Caller owns the memory and must
+ * eventually call rustls_server_config_builder_build, then free the
+ * resulting rustls_server_config. This uses the specified crypto provider and
+ * its safe default value for cipher suites, key exchange groups and protocol versions.
+ */
+struct rustls_server_config_builder *rustls_server_config_builder_new_with_provider(const struct rustls_crypto_provider *provider);
 
 /**
  * Create a rustls_server_config_builder. Caller owns the memory and must

@@ -7,8 +7,7 @@ use std::sync::Arc;
 use libc::{c_char, size_t};
 use pki_types::{CertificateDer, UnixTime};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::client::{ResolvesClientCert, WebPkiServerVerifier};
-use rustls::crypto::ring::ALL_CIPHER_SUITES;
+use rustls::client::ResolvesClientCert;
 use rustls::{
     sign::CertifiedKey, CertificateError, ClientConfig, ClientConnection, DigitallySignedStruct,
     Error, ProtocolVersion, SignatureScheme, SupportedCipherSuite, WantsVerifier,
@@ -18,6 +17,7 @@ use crate::cipher::{
     rustls_certified_key, rustls_server_cert_verifier, rustls_supported_ciphersuite,
 };
 use crate::connection::{rustls_connection, Connection};
+use crate::crypto::{rustls_crypto_provider, ALL_CIPHER_SUITES, DEFAULT_CRYPTO_PROVIDER};
 use crate::error::rustls_result::{InvalidParameter, NullParameter};
 use crate::error::{self, rustls_result};
 use crate::rslice::NulByte;
@@ -106,7 +106,10 @@ impl ServerCertVerifier for NoneVerifier {
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        WebPkiServerVerifier::default_supported_verify_schemes()
+        DEFAULT_CRYPTO_PROVIDER
+            .provider
+            .signature_verification_algorithms()
+            .supported_schemes()
     }
 }
 
@@ -114,8 +117,8 @@ impl rustls_client_config_builder {
     /// Create a rustls_client_config_builder. Caller owns the memory and must
     /// eventually call rustls_client_config_builder_build, then free the
     /// resulting rustls_client_config.
-    /// This uses rustls safe default values
-    /// for the cipher suites, key exchange groups and protocol versions.
+    /// This uses rustls safe default values for the crypto provider,
+    /// cipher suites, key exchange groups and protocol versions.
     /// This starts out with no trusted roots.
     /// Caller must add roots with rustls_client_config_builder_load_roots_from_file
     /// or provide a custom verifier.
@@ -123,7 +126,32 @@ impl rustls_client_config_builder {
     pub extern "C" fn rustls_client_config_builder_new() -> *mut rustls_client_config_builder {
         ffi_panic_boundary! {
             let builder = ClientConfigBuilder {
-                base: rustls::ClientConfig::builder().with_safe_defaults(),
+                base: rustls::ClientConfig::builder_with_provider(DEFAULT_CRYPTO_PROVIDER.provider).with_safe_defaults(),
+                verifier: Arc::new(NoneVerifier),
+                cert_resolver: None,
+                alpn_protocols: vec![],
+                enable_sni: true,
+            };
+            to_boxed_mut_ptr(builder)
+        }
+    }
+
+    /// Create a rustls_client_config_builder. Caller owns the memory and must
+    /// eventually call rustls_client_config_builder_build, then free the
+    /// resulting rustls_client_config.
+    /// This uses the specified crypto provider, and its safe default values for
+    /// cipher suites, key exchange groups and protocol versions.
+    /// This starts out with no trusted roots.
+    /// Caller must add roots with rustls_client_config_builder_load_roots_from_file
+    /// or provide a custom verifier.
+    #[no_mangle]
+    pub extern "C" fn rustls_client_config_builder_new_with_provider(
+        provider: *const rustls_crypto_provider,
+    ) -> *mut rustls_client_config_builder {
+        ffi_panic_boundary! {
+            let provider = try_clone_arc!(provider);
+            let builder = ClientConfigBuilder {
+                base: rustls::ClientConfig::builder_with_provider(provider.provider).with_safe_defaults(),
                 verifier: Arc::new(NoneVerifier),
                 cert_resolver: None,
                 alpn_protocols: vec![],
@@ -179,7 +207,10 @@ impl rustls_client_config_builder {
                 }
             }
 
-            let result = rustls::ClientConfig::builder().with_cipher_suites(&cs_vec).with_safe_default_kx_groups().with_protocol_versions(&versions);
+            let result = rustls::ClientConfig::builder_with_provider(DEFAULT_CRYPTO_PROVIDER.provider)
+                .with_cipher_suites(&cs_vec)
+                .with_safe_default_kx_groups()
+                .with_protocol_versions(&versions);
             let base = match result {
                 Ok(new) => new,
                 Err(_) => return rustls_result::InvalidParameter,
@@ -293,7 +324,14 @@ impl ServerCertVerifier for Verifier {
         cert: &CertificateDer,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        WebPkiServerVerifier::default_verify_tls12_signature(message, cert, dss)
+        rustls::verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &DEFAULT_CRYPTO_PROVIDER
+                .provider
+                .signature_verification_algorithms(),
+        )
     }
 
     fn verify_tls13_signature(
@@ -302,11 +340,21 @@ impl ServerCertVerifier for Verifier {
         cert: &CertificateDer,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        WebPkiServerVerifier::default_verify_tls13_signature(message, cert, dss)
+        rustls::verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &DEFAULT_CRYPTO_PROVIDER
+                .provider
+                .signature_verification_algorithms(),
+        )
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        WebPkiServerVerifier::default_supported_verify_schemes()
+        DEFAULT_CRYPTO_PROVIDER
+            .provider
+            .signature_verification_algorithms()
+            .supported_schemes()
     }
 }
 

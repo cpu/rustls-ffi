@@ -232,8 +232,16 @@ main(int argc, const char **argv)
 {
   int ret = 1;
   int sockfd = 0;
+
+#if defined(DEFINE_AWS_LC_RS)
+  const struct rustls_crypto_provider *crypto_provider =
+    rustls_crypto_provider_aws_lc_rs_new();
+#else
+  const struct rustls_crypto_provider *crypto_provider =
+    rustls_crypto_provider_ring_new();
+#endif
   struct rustls_server_config_builder *config_builder =
-    rustls_server_config_builder_new();
+    rustls_server_config_builder_new_with_provider(crypto_provider);
   const struct rustls_server_config *server_config = NULL;
   struct rustls_connection *rconn = NULL;
   const struct rustls_certified_key *certified_key = NULL;
@@ -402,6 +410,7 @@ main(int argc, const char **argv)
   ret = 0;
 
 cleanup:
+  rustls_crypto_provider_free(crypto_provider);
   rustls_certified_key_free(certified_key);
   rustls_root_cert_store_builder_free(client_cert_root_store_builder);
   rustls_root_cert_store_free(client_cert_root_store);
