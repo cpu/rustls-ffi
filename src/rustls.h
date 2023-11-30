@@ -207,6 +207,8 @@ typedef struct rustls_client_config_builder rustls_client_config_builder;
 
 typedef struct rustls_connection rustls_connection;
 
+typedef struct rustls_crypto_provider rustls_crypto_provider;
+
 /**
  * An alias for `struct iovec` from uio.h (on Unix) or `WSABUF` on Windows. You should cast
  * `const struct rustls_iovec *` to `const struct iovec *` on Unix, or `const *LPWSABUF`
@@ -1558,6 +1560,20 @@ rustls_result rustls_connection_read_2(struct rustls_connection *conn,
  * Must not be called twice with the same value.
  */
 void rustls_connection_free(struct rustls_connection *conn);
+
+#if defined(DEFINE_RING)
+const struct rustls_crypto_provider *rustls_crypto_provider_ring_new(void);
+#endif
+
+#if defined(DEFINE_AWS_LC_RS)
+const struct rustls_crypto_provider *rustls_crypto_provider_aws_lc_rs_new(void);
+#endif
+
+rustls_result rustls_crypto_provider_cipher_suites(const struct rustls_crypto_provider *provider,
+                                                   const struct rustls_supported_ciphersuite *const **cipher_suites,
+                                                   size_t *cipher_suites_len);
+
+void rustls_crypto_provider_free(const struct rustls_crypto_provider *provider);
 
 /**
  * After a rustls function returns an error, you may call
