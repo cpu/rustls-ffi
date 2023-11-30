@@ -16,14 +16,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        crypto:
+          - ring
+          - aws_lc_rs
+          - both
         # test a bunch of toolchains on ubuntu
-        cc: [clang, gcc]
+        cc:
+          - clang
+          - gcc
         rust:
           - stable
           - beta
           - nightly
           - 1.61.0 # MSRV - keep in sync with what rustls considers MSRV
-        os: [ubuntu-20.04]
+        os:
+          - ubuntu-20.04
         # but only stable on macos/windows (slower platforms)
         include:
           - os: macos-latest
@@ -41,7 +48,7 @@ jobs:
           toolchain: ${{ matrix.rust }}
       - env:
           CARGO_UNSTABLE_HTTP_REGISTRY: true
-        run: make CC=${{ matrix.cc }} PROFILE=release test
+        run: make CC=${{ matrix.cc }} PROFILE=release CRYPTO_PROVIDER=${{ matrix.crypto }} test
 
   valgrind:
     name: Valgrind
@@ -53,7 +60,7 @@ jobs:
       - name: Install valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
       - run: export VALGRIND="valgrind -q"
-      - run: make test
+      - run: make test integration
 
   test-windows:
     name: Windows
@@ -67,7 +74,10 @@ jobs:
       # Remove link.exe from non-MSVC packages that interferes with MSVC link
       - run: rm "C:\Program Files\Git\usr\bin\link.exe"
       - run: rm "C:\msys64\usr\bin\link.exe"
-      - run: make -f Makefile.Windows
+      - name: Install NASM for aws-lc-rs on Windows
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
+      - run: make -f Makefile.Windows test integration
 
   test-windows-cmake-debug:
     name: Windows CMake, Debug configuration
@@ -78,6 +88,9 @@ jobs:
           persist-credentials: false
       - name: Install nightly rust toolchain
         uses: dtolnay/rust-toolchain@nightly
+      - name: Install NASM for aws-lc-rs on Windows
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
       - name: Configure CMake
         run: cmake -S . -B build
       - name: Build, debug configuration
@@ -95,6 +108,9 @@ jobs:
           persist-credentials: false
       - name: Install nightly rust toolchain
         uses: dtolnay/rust-toolchain@nightly
+      - name: Install NASM for aws-lc-rs on Windows
+        if: runner.os == 'Windows'
+        uses: ilammy/setup-nasm@v1
       - name: Configure CMake
         run: cmake -S . -B build
       - name: Build, release configuration
