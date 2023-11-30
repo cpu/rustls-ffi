@@ -431,6 +431,19 @@ main(int argc, const char **argv)
   setmode(STDOUT_FILENO, O_BINARY);
 #endif
 
+  const struct rustls_crypto_provider *provider = rustls_crypto_provider_ring_new();
+  const struct rustls_supported_ciphersuite * const* cipher_suites;
+  size_t cipher_suites_len;
+  result = rustls_crypto_provider_cipher_suites(provider, &cipher_suites, &cipher_suites_len);
+  if(result != RUSTLS_RESULT_OK) {
+    print_error("getting ciphersuites", result);
+    goto cleanup;
+  }
+  for(size_t i = 0; i < cipher_suites_len; i++) {
+    int suite = rustls_supported_ciphersuite_get_suite(cipher_suites[i]);
+    printf("index %ld = suite %d\n", i, suite);
+  }
+
   if(getenv("CA_FILE")) {
     server_cert_root_store_builder = rustls_root_cert_store_builder_new();
     result = rustls_client_config_builder_load_roots_from_file(
