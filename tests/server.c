@@ -232,8 +232,6 @@ main(int argc, const char **argv)
 {
   int ret = 1;
   int sockfd = 0;
-  struct rustls_server_config_builder *config_builder =
-    rustls_server_config_builder_new();
   const struct rustls_server_config *server_config = NULL;
   struct rustls_connection *rconn = NULL;
   const struct rustls_certified_key *certified_key = NULL;
@@ -243,6 +241,24 @@ main(int argc, const char **argv)
   struct rustls_web_pki_client_cert_verifier_builder
     *client_cert_verifier_builder = NULL;
   struct rustls_client_cert_verifier *client_cert_verifier = NULL;
+
+  struct rustls_crypto_provider_builder *crypto_provider_builder = NULL;
+  const struct rustls_crypto_provider *crypto_provider = NULL;
+#if defined(DEFINE_AWS_LC_RS)
+  crypto_provider_builder = rustls_crypto_provider_builder_aws_lc_rs();
+#else
+  crypto_provider_builder = rustls_crypto_provider_builder_ring();
+#endif
+
+  unsigned int result = rustls_crypto_provider_builder_build(
+    crypto_provider_builder, &crypto_provider);
+  if(result != RUSTLS_RESULT_OK) {
+    print_error("building crypto provider", result);
+    goto cleanup;
+  }
+
+  struct rustls_server_config_builder *config_builder =
+    rustls_server_config_builder_new_with_provider(crypto_provider);
 
   /* Set this global variable for logging purposes. */
   programname = "server";
@@ -402,6 +418,8 @@ main(int argc, const char **argv)
   ret = 0;
 
 cleanup:
+  rustls_crypto_provider_builder_free(crypto_provider_builder);
+  rustls_crypto_provider_free(crypto_provider);
   rustls_certified_key_free(certified_key);
   rustls_root_cert_store_builder_free(client_cert_root_store_builder);
   rustls_root_cert_store_free(client_cert_root_store);

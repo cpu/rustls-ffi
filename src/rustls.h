@@ -207,6 +207,10 @@ typedef struct rustls_client_config_builder rustls_client_config_builder;
 
 typedef struct rustls_connection rustls_connection;
 
+typedef struct rustls_crypto_provider rustls_crypto_provider;
+
+typedef struct rustls_crypto_provider_builder rustls_crypto_provider_builder;
+
 /**
  * An alias for `struct iovec` from uio.h (on Unix) or `WSABUF` on Windows. You should cast
  * `const struct rustls_iovec *` to `const struct iovec *` on Unix, or `const *LPWSABUF`
@@ -572,14 +576,6 @@ typedef uint32_t (*rustls_session_store_put_callback)(rustls_session_store_userd
                                                       const struct rustls_slice_bytes *key,
                                                       const struct rustls_slice_bytes *val);
 
-extern const struct rustls_supported_ciphersuite *RUSTLS_ALL_CIPHER_SUITES[9];
-
-extern const size_t RUSTLS_ALL_CIPHER_SUITES_LEN;
-
-extern const struct rustls_supported_ciphersuite *RUSTLS_DEFAULT_CIPHER_SUITES[9];
-
-extern const size_t RUSTLS_DEFAULT_CIPHER_SUITES_LEN;
-
 extern const uint16_t RUSTLS_ALL_VERSIONS[2];
 
 extern const size_t RUSTLS_ALL_VERSIONS_LEN;
@@ -846,33 +842,9 @@ uint16_t rustls_supported_ciphersuite_get_suite(const struct rustls_supported_ci
 struct rustls_str rustls_supported_ciphersuite_get_name(const struct rustls_supported_ciphersuite *supported_ciphersuite);
 
 /**
- * Return the length of rustls' list of supported cipher suites.
- */
-size_t rustls_all_ciphersuites_len(void);
-
-/**
- * Get a pointer to a member of rustls' list of supported cipher suites. This will return non-NULL
- * for i < rustls_all_ciphersuites_len().
- * The returned pointer is valid for the lifetime of the program and may be used directly when
- * building a ClientConfig or ServerConfig.
- */
-const struct rustls_supported_ciphersuite *rustls_all_ciphersuites_get_entry(size_t i);
-
-/**
- * Return the length of rustls' list of default cipher suites.
- */
-size_t rustls_default_ciphersuites_len(void);
-
-/**
- * Get a pointer to a member of rustls' list of supported cipher suites. This will return non-NULL
- * for i < rustls_default_ciphersuites_len().
- * The returned pointer is valid for the lifetime of the program and may be used directly when
- * building a ClientConfig or ServerConfig.
- */
-const struct rustls_supported_ciphersuite *rustls_default_ciphersuites_get_entry(size_t i);
-
-/**
- * Build a `rustls_certified_key` from a certificate chain and a private key.
+ * Build a `rustls_certified_key` from a certificate chain and a private key
+ * using the default crypto provider.
+ *
  * `cert_chain` must point to a buffer of `cert_chain_len` bytes, containing
  * a series of PEM-encoded certificates, with the end-entity (leaf)
  * certificate first.
@@ -904,6 +876,43 @@ rustls_result rustls_certified_key_build(const uint8_t *cert_chain,
                                          const uint8_t *private_key,
                                          size_t private_key_len,
                                          const struct rustls_certified_key **certified_key_out);
+
+/**
+ * Build a `rustls_certified_key` from a certificate chain and a private key
+ * using the specified crypto provider.
+ *
+ * `cert_chain` must point to a buffer of `cert_chain_len` bytes, containing
+ * a series of PEM-encoded certificates, with the end-entity (leaf)
+ * certificate first.
+ *
+ * `private_key` must point to a buffer of `private_key_len` bytes, containing
+ * a PEM-encoded private key in either PKCS#1 or PKCS#8 format.
+ *
+ * On success, this writes a pointer to the newly created
+ * `rustls_certified_key` in `certified_key_out`. That pointer must later
+ * be freed with `rustls_certified_key_free` to avoid memory leaks. Note that
+ * internally, this is an atomically reference-counted pointer, so even after
+ * the original caller has called `rustls_certified_key_free`, other objects
+ * may retain a pointer to the object. The memory will be freed when all
+ * references are gone.
+ *
+ * This function does not take ownership of any of its input pointers. It
+ * parses the pointed-to data and makes a copy of the result. You may
+ * free the cert_chain and private_key pointers after calling it.
+ *
+ * Typically, you will build a `rustls_certified_key`, use it to create a
+ * `rustls_server_config` (which increments the reference count), and then
+ * immediately call `rustls_certified_key_free`. That leaves the
+ * `rustls_server_config` in possession of the sole reference, so the
+ * `rustls_certified_key`'s memory will automatically be released when
+ * the `rustls_server_config` is freed.
+ */
+rustls_result rustls_certified_key_build_with_provider(const uint8_t *cert_chain,
+                                                       size_t cert_chain_len,
+                                                       const uint8_t *private_key,
+                                                       size_t private_key_len,
+                                                       const struct rustls_certified_key **certified_key_out,
+                                                       const struct rustls_crypto_provider *provider);
 
 /**
  * Return the i-th rustls_certificate in the rustls_certified_key. 0 gives the
@@ -1011,9 +1020,9 @@ void rustls_root_cert_store_free(const struct rustls_root_cert_store *store);
 void rustls_client_cert_verifier_free(struct rustls_client_cert_verifier *verifier);
 
 /**
- * Create a `rustls_web_pki_client_cert_verifier_builder`. Caller owns the memory and may
- * eventually call `rustls_web_pki_client_cert_verifier_builder_free` to free it, whether or
- * not `rustls_web_pki_client_cert_verifier_builder_build` was called.
+ * Create a `rustls_web_pki_client_cert_verifier_builder` with the default crypto provider
+ * Caller owns the memory and may eventually call `rustls_web_pki_client_cert_verifier_builder_free`
+ * to free it, whether or not `rustls_web_pki_client_cert_verifier_builder_build` was called.
  *
  * Without further modification the builder will produce a client certificate verifier that
  * will require a client present a client certificate that chains to one of the trust anchors
@@ -1035,6 +1044,33 @@ void rustls_client_cert_verifier_free(struct rustls_client_cert_verifier *verifi
  * ownership of the pointed-to data.
  */
 struct rustls_web_pki_client_cert_verifier_builder *rustls_web_pki_client_cert_verifier_builder_new(const struct rustls_root_cert_store *store);
+
+/**
+ * Create a `rustls_web_pki_client_cert_verifier_builder` with the default crypto provider
+ * Caller owns the memory and may eventually call `rustls_web_pki_client_cert_verifier_builder_free`
+ * to free it, whether or not `rustls_web_pki_client_cert_verifier_builder_build` was called.
+ *
+ * Without further modification the builder will produce a client certificate verifier that
+ * will require a client present a client certificate that chains to one of the trust anchors
+ * in the provided `rustls_root_cert_store`. The root cert store must not be empty.
+ *
+ * Revocation checking will not be performed unless
+ * `rustls_web_pki_client_cert_verifier_builder_add_crl` is used to add certificate revocation
+ * lists (CRLs) to the builder. If CRLs are added, revocation checking will be performed
+ * for the entire certificate chain unless
+ * `rustls_web_pki_client_cert_verifier_only_check_end_entity_revocation` is used. Unknown
+ * revocation status for certificates considered for revocation status will be treated as
+ * an error unless `rustls_web_pki_client_cert_verifier_allow_unknown_revocation_status` is
+ * used.
+ *
+ * Unauthenticated clients will not be permitted unless
+ * `rustls_web_pki_client_cert_verifier_builder_allow_unauthenticated` is used.
+ *
+ * This copies the contents of the `rustls_root_cert_store`. It does not take
+ * ownership of the pointed-to data.
+ */
+struct rustls_web_pki_client_cert_verifier_builder *rustls_web_pki_client_cert_verifier_builder_new_with_provider(const struct rustls_root_cert_store *store,
+                                                                                                                  const struct rustls_crypto_provider *provider);
 
 /**
  * Add one or more certificate revocation lists (CRLs) to the client certificate verifier
@@ -1114,9 +1150,9 @@ rustls_result rustls_web_pki_client_cert_verifier_builder_build(struct rustls_we
 void rustls_web_pki_client_cert_verifier_builder_free(struct rustls_web_pki_client_cert_verifier_builder *builder);
 
 /**
- * Create a `rustls_web_pki_server_cert_verifier_builder`. Caller owns the memory and may
- * free it with `rustls_web_pki_server_cert_verifier_builder_free`, regardless of whether
- * `rustls_web_pki_server_cert_verifier_builder_build` was called.
+ * Create a `rustls_web_pki_server_cert_verifier_builder` with the default crypto provider.
+ * Caller owns the memory and may free it with `rustls_web_pki_server_cert_verifier_builder_free`,
+ * regardless of whether `rustls_web_pki_server_cert_verifier_builder_build` was called.
  *
  * Without further modification the builder will produce a server certificate verifier that
  * will require a server present a certificate that chains to one of the trust anchors
@@ -1135,6 +1171,30 @@ void rustls_web_pki_client_cert_verifier_builder_free(struct rustls_web_pki_clie
  * ownership of the pointed-to data.
  */
 struct rustls_web_pki_server_cert_verifier_builder *rustls_web_pki_server_cert_verifier_builder_new(const struct rustls_root_cert_store *store);
+
+/**
+ * Create a `rustls_web_pki_server_cert_verifier_builder` with the default crypto provider.
+ * Caller owns the memory and may free it with `rustls_web_pki_server_cert_verifier_builder_free`,
+ * regardless of whether `rustls_web_pki_server_cert_verifier_builder_build` was called.
+ *
+ * Without further modification the builder will produce a server certificate verifier that
+ * will require a server present a certificate that chains to one of the trust anchors
+ * in the provided `rustls_root_cert_store`. The root cert store must not be empty.
+ *
+ * Revocation checking will not be performed unless
+ * `rustls_web_pki_server_cert_verifier_builder_add_crl` is used to add certificate revocation
+ * lists (CRLs) to the builder.  If CRLs are added, revocation checking will be performed
+ * for the entire certificate chain unless
+ * `rustls_web_pki_server_cert_verifier_only_check_end_entity_revocation` is used. Unknown
+ * revocation status for certificates considered for revocation status will be treated as
+ * an error unless `rustls_web_pki_server_cert_verifier_allow_unknown_revocation_status` is
+ * used.
+ *
+ * This copies the contents of the `rustls_root_cert_store`. It does not take
+ * ownership of the pointed-to data.
+ */
+struct rustls_web_pki_server_cert_verifier_builder *rustls_web_pki_server_cert_verifier_builder_new_with_provider(const struct rustls_root_cert_store *store,
+                                                                                                                  const struct rustls_crypto_provider *provider);
 
 /**
  * Add one or more certificate revocation lists (CRLs) to the server certificate verifier
@@ -1196,7 +1256,8 @@ void rustls_server_cert_verifier_free(struct rustls_server_cert_verifier *verifi
  * Create a rustls_client_config_builder. Caller owns the memory and must
  * eventually call rustls_client_config_builder_build, then free the
  * resulting rustls_client_config.
- * This uses rustls safe default values
+ * This uses rustls safe default values for the crypto provider,
+ * cipher suites, key exchange groups and protocol versions.
  * for the cipher suites, key exchange groups and protocol versions.
  * This starts out with no trusted roots.
  * Caller must add roots with rustls_client_config_builder_load_roots_from_file
@@ -1207,12 +1268,21 @@ struct rustls_client_config_builder *rustls_client_config_builder_new(void);
 /**
  * Create a rustls_client_config_builder. Caller owns the memory and must
  * eventually call rustls_client_config_builder_build, then free the
- * resulting rustls_client_config. Specify cipher suites in preference
- * order; the `cipher_suites` parameter must point to an array containing
- * `len` pointers to `rustls_supported_ciphersuite` previously obtained
- * from `rustls_all_ciphersuites_get_entry()`, or to a provided array,
- * RUSTLS_DEFAULT_CIPHER_SUITES or RUSTLS_ALL_CIPHER_SUITES. Set the TLS
- * protocol versions to use when negotiating a TLS session.
+ * resulting rustls_client_config.
+ * This uses rustls safe default values for the crypto provider,
+ * cipher suites, key exchange groups and protocol versions.
+ * for the cipher suites, key exchange groups and protocol versions.
+ * This starts out with no trusted roots.
+ * Caller must add roots with rustls_client_config_builder_load_roots_from_file
+ * or provide a custom verifier.
+ */
+struct rustls_client_config_builder *rustls_client_config_builder_new_with_provider(const struct rustls_crypto_provider *provider);
+
+/**
+ * Create a rustls_client_config_builder. Caller owns the memory and must
+ * eventually call rustls_client_config_builder_build, then free the
+ * resulting rustls_client_config. Set the TLS protocol versions to use when
+ * negotiating a TLS session.
  *
  * `tls_version` is the version of the protocol, as defined in rfc8446,
  * ch. 4.2.1 and end of ch. 5.1. Some values are defined in
@@ -1222,8 +1292,7 @@ struct rustls_client_config_builder *rustls_client_config_builder_new(void);
  * `versions` will only be used during the call and the application retains
  * ownership. `len` is the number of consecutive `uint16_t` pointed to by `versions`.
  */
-rustls_result rustls_client_config_builder_new_custom(const struct rustls_supported_ciphersuite *const *cipher_suites,
-                                                      size_t cipher_suites_len,
+rustls_result rustls_client_config_builder_new_custom(const struct rustls_crypto_provider *provider,
                                                       const uint16_t *tls_versions,
                                                       size_t tls_versions_len,
                                                       struct rustls_client_config_builder **builder_out);
@@ -1492,12 +1561,14 @@ void rustls_connection_get_alpn_protocol(const struct rustls_connection *conn,
 uint16_t rustls_connection_get_protocol_version(const struct rustls_connection *conn);
 
 /**
- * Retrieves the cipher suite agreed with the peer.
+ * Retrieves the cipher suite identifier agreed with the peer.
  * This returns NULL until the ciphersuite is agreed.
  * The returned pointer lives as long as the program.
  * <https://docs.rs/rustls/latest/rustls/enum.Connection.html#method.negotiated_cipher_suite>
  */
-const struct rustls_supported_ciphersuite *rustls_connection_get_negotiated_ciphersuite(const struct rustls_connection *conn);
+const uint16_t *rustls_connection_get_negotiated_ciphersuite(const struct rustls_connection *conn);
+
+struct rustls_str rustls_connection_get_negotiated_ciphersuite_name(const struct rustls_connection *conn);
 
 /**
  * Write up to `count` plaintext bytes from `buf` into the `rustls_connection`.
@@ -1559,6 +1630,31 @@ rustls_result rustls_connection_read_2(struct rustls_connection *conn,
  */
 void rustls_connection_free(struct rustls_connection *conn);
 
+struct rustls_crypto_provider_builder *rustls_crypto_provider_builder_new(void);
+
+#if defined(DEFINE_RING)
+struct rustls_crypto_provider_builder *rustls_crypto_provider_builder_ring(void);
+#endif
+
+#if defined(DEFINE_AWS_LC_RS)
+struct rustls_crypto_provider_builder *rustls_crypto_provider_builder_aws_lc_rs(void);
+#endif
+
+rustls_result rustls_crypto_provider_builder_set_cipher_suites(struct rustls_crypto_provider_builder *builder,
+                                                               const struct rustls_supported_ciphersuite *const *cipher_suites,
+                                                               size_t cipher_suites_len);
+
+rustls_result rustls_crypto_provider_builder_build(struct rustls_crypto_provider_builder *builder,
+                                                   const struct rustls_crypto_provider **provider_out);
+
+void rustls_crypto_provider_builder_free(struct rustls_crypto_provider_builder *builder);
+
+rustls_result rustls_crypto_provider_cipher_suites(const struct rustls_crypto_provider *provider,
+                                                   const struct rustls_supported_ciphersuite *const **cipher_suites,
+                                                   size_t *cipher_suites_len);
+
+void rustls_crypto_provider_free(const struct rustls_crypto_provider *provider);
+
 /**
  * After a rustls function returns an error, you may call
  * this to get a pointer to a buffer containing a detailed error
@@ -1612,11 +1708,16 @@ struct rustls_server_config_builder *rustls_server_config_builder_new(void);
 /**
  * Create a rustls_server_config_builder. Caller owns the memory and must
  * eventually call rustls_server_config_builder_build, then free the
- * resulting rustls_server_config. Specify cipher suites in preference
- * order; the `cipher_suites` parameter must point to an array containing
- * `len` pointers to `rustls_supported_ciphersuite` previously obtained
- * from `rustls_all_ciphersuites_get_entry()`. Set the TLS protocol
- * versions to use when negotiating a TLS session.
+ * resulting rustls_server_config. This uses rustls safe default values
+ * for the cipher suites, key exchange groups and protocol versions.
+ */
+struct rustls_server_config_builder *rustls_server_config_builder_new_with_provider(const struct rustls_crypto_provider *provider);
+
+/**
+ * Create a rustls_server_config_builder. Caller owns the memory and must
+ * eventually call rustls_server_config_builder_build, then free the
+ * resulting rustls_server_config. Set the TLS protocol versions to use
+ * when negotiating a TLS session.
  *
  * `tls_version` is the version of the protocol, as defined in rfc8446,
  * ch. 4.2.1 and end of ch. 5.1. Some values are defined in
@@ -1625,8 +1726,7 @@ struct rustls_server_config_builder *rustls_server_config_builder_new(void);
  * `versions` will only be used during the call and the application retains
  * ownership. `len` is the number of consecutive `uint16_t` pointed to by `versions`.
  */
-rustls_result rustls_server_config_builder_new_custom(const struct rustls_supported_ciphersuite *const *cipher_suites,
-                                                      size_t cipher_suites_len,
+rustls_result rustls_server_config_builder_new_custom(const struct rustls_crypto_provider *provider,
                                                       const uint16_t *tls_versions,
                                                       size_t tls_versions_len,
                                                       struct rustls_server_config_builder **builder_out);

@@ -411,8 +411,14 @@ main(int argc, const char **argv)
   /* Set this global variable for logging purposes. */
   programname = "client";
 
-  struct rustls_client_config_builder *config_builder =
-    rustls_client_config_builder_new();
+  struct rustls_crypto_provider_builder *crypto_provider_builder = NULL;
+  const struct rustls_crypto_provider *crypto_provider = NULL;
+#if defined(DEFINE_AWS_LC_RS)
+  crypto_provider_builder = rustls_crypto_provider_builder_aws_lc_rs();
+#else
+  crypto_provider_builder = rustls_crypto_provider_builder_ring();
+#endif
+
   struct rustls_root_cert_store_builder *server_cert_root_store_builder = NULL;
   const struct rustls_root_cert_store *server_cert_root_store = NULL;
   const struct rustls_client_config *client_config = NULL;
@@ -421,6 +427,66 @@ main(int argc, const char **argv)
   struct rustls_server_cert_verifier *server_cert_verifier = NULL;
   struct rustls_slice_bytes alpn_http11;
   const struct rustls_certified_key *certified_key = NULL;
+
+  result = rustls_crypto_provider_builder_build(crypto_provider_builder,
+                                                &crypto_provider);
+  if(result != RUSTLS_RESULT_OK) {
+    print_error("building crypto provider", result);
+    goto cleanup;
+  }
+
+  const struct rustls_supported_ciphersuite *const *cipher_suites;
+  size_t cipher_suites_len;
+  result = rustls_crypto_provider_cipher_suites(
+    crypto_provider, &cipher_suites, &cipher_suites_len);
+  if(result != RUSTLS_RESULT_OK) {
+    print_error("getting ciphersuites", result);
+    goto cleanup;
+  }
+
+  const struct rustls_supported_ciphersuite *custom_ciphersuite;
+  for(size_t i = 0; i < cipher_suites_len; i++) {
+    int suite = rustls_supported_ciphersuite_get_suite(cipher_suites[i]);
+    const rustls_str name =
+      rustls_supported_ciphersuite_get_name(cipher_suites[i]);
+    printf("index %ld = suite %d name = %.*s\n",
+           i,
+           suite,
+           (int)name.len,
+           name.data);
+
+    if(strncmp(name.data,
+               "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+               name.len) == 0) {
+      printf("Choosing ciphersuite!\n");
+      custom_ciphersuite = cipher_suites[i];
+    }
+  }
+
+  rustls_crypto_provider_builder_free(crypto_provider_builder);
+#if defined(DEFINE_AWS_LC_RS)
+  crypto_provider_builder = rustls_crypto_provider_builder_aws_lc_rs();
+#else
+  crypto_provider_builder = rustls_crypto_provider_builder_ring();
+#endif
+  rustls_crypto_provider_builder_set_cipher_suites(
+    crypto_provider_builder, &custom_ciphersuite, 1);
+  result = rustls_crypto_provider_builder_build(crypto_provider_builder,
+                                                &crypto_provider);
+  if(result != RUSTLS_RESULT_OK) {
+    print_error("building crypto provider", result);
+    goto cleanup;
+  }
+
+  struct rustls_client_config_builder *config_builder;
+  result = rustls_client_config_builder_new_custom(crypto_provider,
+                                                   RUSTLS_ALL_VERSIONS,
+                                                   RUSTLS_ALL_VERSIONS_LEN,
+                                                   &config_builder);
+  if(result != RUSTLS_RESULT_OK) {
+    print_error("building custom client config builder", result);
+    goto cleanup;
+  }
 
   alpn_http11.data = (unsigned char *)"http/1.1";
   alpn_http11.len = 8;
@@ -501,6 +567,8 @@ main(int argc, const char **argv)
   ret = 0;
 
 cleanup:
+  rustls_crypto_provider_builder_free(crypto_provider_builder);
+  rustls_crypto_provider_free(crypto_provider);
   rustls_root_cert_store_builder_free(server_cert_root_store_builder);
   rustls_root_cert_store_free(server_cert_root_store);
   rustls_web_pki_server_cert_verifier_builder_free(

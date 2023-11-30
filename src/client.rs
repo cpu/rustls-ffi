@@ -8,17 +8,15 @@ use libc::{c_char, size_t};
 use pki_types::{CertificateDer, UnixTime};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::ResolvesClientCert;
-use rustls::crypto::ring::ALL_CIPHER_SUITES;
 use rustls::{
     sign::CertifiedKey, CertificateError, ClientConfig, ClientConnection, DigitallySignedStruct,
-    Error, ProtocolVersion, SignatureScheme, SupportedCipherSuite, WantsVerifier,
+    Error, ProtocolVersion, SignatureScheme, WantsVerifier,
 };
 
-use crate::cipher::{
-    rustls_certified_key, rustls_server_cert_verifier, rustls_supported_ciphersuite,
-};
+use crate::cipher::{rustls_certified_key, rustls_server_cert_verifier};
 use crate::connection::{rustls_connection, Connection};
-use crate::error::rustls_result::{InvalidParameter, NullParameter};
+use crate::crypto::{default_provider, rustls_crypto_provider};
+use crate::error::rustls_result::NullParameter;
 use crate::error::{self, rustls_result};
 use crate::rslice::NulByte;
 use crate::rslice::{rustls_slice_bytes, rustls_slice_slice_bytes, rustls_str};
@@ -106,7 +104,8 @@ impl ServerCertVerifier for NoneVerifier {
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        rustls::crypto::ring::default_provider()
+        default_provider()
+            .provider
             .signature_verification_algorithms
             .supported_schemes()
     }
@@ -116,7 +115,8 @@ impl rustls_client_config_builder {
     /// Create a rustls_client_config_builder. Caller owns the memory and must
     /// eventually call rustls_client_config_builder_build, then free the
     /// resulting rustls_client_config.
-    /// This uses rustls safe default values
+    /// This uses rustls safe default values for the crypto provider,
+    /// cipher suites, key exchange groups and protocol versions.
     /// for the cipher suites, key exchange groups and protocol versions.
     /// This starts out with no trusted roots.
     /// Caller must add roots with rustls_client_config_builder_load_roots_from_file
@@ -125,7 +125,9 @@ impl rustls_client_config_builder {
     pub extern "C" fn rustls_client_config_builder_new() -> *mut rustls_client_config_builder {
         ffi_panic_boundary! {
             let builder = ClientConfigBuilder {
-                base: rustls::ClientConfig::builder(),
+                base: rustls::ClientConfig::builder_with_provider(default_provider().provider)
+                    .with_safe_default_protocol_versions()
+                    .unwrap(),
                 verifier: Arc::new(NoneVerifier),
                 cert_resolver: None,
                 alpn_protocols: vec![],
@@ -137,12 +139,36 @@ impl rustls_client_config_builder {
 
     /// Create a rustls_client_config_builder. Caller owns the memory and must
     /// eventually call rustls_client_config_builder_build, then free the
-    /// resulting rustls_client_config. Specify cipher suites in preference
-    /// order; the `cipher_suites` parameter must point to an array containing
-    /// `len` pointers to `rustls_supported_ciphersuite` previously obtained
-    /// from `rustls_all_ciphersuites_get_entry()`, or to a provided array,
-    /// RUSTLS_DEFAULT_CIPHER_SUITES or RUSTLS_ALL_CIPHER_SUITES. Set the TLS
-    /// protocol versions to use when negotiating a TLS session.
+    /// resulting rustls_client_config.
+    /// This uses rustls safe default values for the crypto provider,
+    /// cipher suites, key exchange groups and protocol versions.
+    /// for the cipher suites, key exchange groups and protocol versions.
+    /// This starts out with no trusted roots.
+    /// Caller must add roots with rustls_client_config_builder_load_roots_from_file
+    /// or provide a custom verifier.
+    #[no_mangle]
+    pub extern "C" fn rustls_client_config_builder_new_with_provider(
+        provider: *const rustls_crypto_provider,
+    ) -> *mut rustls_client_config_builder {
+        ffi_panic_boundary! {
+            let provider = try_clone_arc!(provider);
+            let builder = ClientConfigBuilder {
+                base: rustls::ClientConfig::builder_with_provider(provider.provider.clone())
+                    .with_safe_default_protocol_versions()
+                    .unwrap(),
+                verifier: Arc::new(NoneVerifier),
+                cert_resolver: None,
+                alpn_protocols: vec![],
+                enable_sni: true,
+            };
+            to_boxed_mut_ptr(builder)
+        }
+    }
+
+    /// Create a rustls_client_config_builder. Caller owns the memory and must
+    /// eventually call rustls_client_config_builder_build, then free the
+    /// resulting rustls_client_config. Set the TLS protocol versions to use when
+    /// negotiating a TLS session.
     ///
     /// `tls_version` is the version of the protocol, as defined in rfc8446,
     /// ch. 4.2.1 and end of ch. 5.1. Some values are defined in
@@ -153,22 +179,13 @@ impl rustls_client_config_builder {
     /// ownership. `len` is the number of consecutive `uint16_t` pointed to by `versions`.
     #[no_mangle]
     pub extern "C" fn rustls_client_config_builder_new_custom(
-        cipher_suites: *const *const rustls_supported_ciphersuite,
-        cipher_suites_len: size_t,
+        provider: *const rustls_crypto_provider,
         tls_versions: *const u16,
         tls_versions_len: size_t,
         builder_out: *mut *mut rustls_client_config_builder,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let cipher_suites: &[*const rustls_supported_ciphersuite] = try_slice!(cipher_suites, cipher_suites_len);
-            let mut cs_vec: Vec<SupportedCipherSuite> = Vec::new();
-            for &cs in cipher_suites.iter() {
-                let cs = try_ref_from_ptr!(cs);
-                match ALL_CIPHER_SUITES.iter().find(|&acs| cs.eq(acs)) {
-                    Some(scs) => cs_vec.push(*scs),
-                    None => return InvalidParameter,
-                }
-            }
+            let provider = try_clone_arc!(provider);
 
             let tls_versions: &[u16] = try_slice!(tls_versions, tls_versions_len);
             let mut versions = vec![];
@@ -181,11 +198,7 @@ impl rustls_client_config_builder {
                 }
             }
 
-            let provider = rustls::crypto::CryptoProvider{
-                cipher_suites: cs_vec,
-                ..rustls::crypto::ring::default_provider()
-            };
-            let result = rustls::ClientConfig::builder_with_provider(provider.into())
+            let result = rustls::ClientConfig::builder_with_provider(provider.provider.clone())
                 .with_protocol_versions(&versions);
             let base = match result {
                 Ok(new) => new,
@@ -304,7 +317,9 @@ impl ServerCertVerifier for Verifier {
             message,
             cert,
             dss,
-            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+            &default_provider()
+                .provider
+                .signature_verification_algorithms,
         )
     }
 
@@ -318,12 +333,15 @@ impl ServerCertVerifier for Verifier {
             message,
             cert,
             dss,
-            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+            &default_provider()
+                .provider
+                .signature_verification_algorithms,
         )
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        rustls::crypto::ring::default_provider()
+        default_provider()
+            .provider
             .signature_verification_algorithms
             .supported_schemes()
     }
