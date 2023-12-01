@@ -431,10 +431,12 @@ main(int argc, const char **argv)
   setmode(STDOUT_FILENO, O_BINARY);
 #endif
 
-  const struct rustls_crypto_provider *provider = rustls_crypto_provider_ring_new();
-  const struct rustls_supported_ciphersuite * const* cipher_suites;
+  const struct rustls_crypto_provider *provider =
+    rustls_crypto_provider_ring_new();
+  const struct rustls_supported_ciphersuite *const *cipher_suites;
   size_t cipher_suites_len;
-  result = rustls_crypto_provider_cipher_suites(provider, &cipher_suites, &cipher_suites_len);
+  result = rustls_crypto_provider_cipher_suites(
+    provider, &cipher_suites, &cipher_suites_len);
   if(result != RUSTLS_RESULT_OK) {
     print_error("getting ciphersuites", result);
     goto cleanup;
