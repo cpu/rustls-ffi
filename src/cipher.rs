@@ -78,22 +78,20 @@ impl Castable for rustls_supported_ciphersuite {
     type RustType = SupportedCipherSuite;
 }
 
-impl rustls_supported_ciphersuite {
-    /// Return a 16-bit unsigned integer corresponding to this cipher suite's assignment from
-    /// <https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-4>.
-    /// The bytes from the assignment are interpreted in network order.
-    #[no_mangle]
-    pub extern "C" fn rustls_supported_ciphersuite_get_suite(
-        supported_ciphersuite: *const rustls_supported_ciphersuite,
-    ) -> u16 {
-        let supported_ciphersuite = try_ref_from_ptr!(supported_ciphersuite);
-        match supported_ciphersuite {
-            rustls::SupportedCipherSuite::Tls12(sc) => &sc.common,
-            rustls::SupportedCipherSuite::Tls13(sc) => &sc.common,
-        }
-        .suite
-        .get_u16()
+/// Return a 16-bit unsigned integer corresponding to this cipher suite's assignment from
+/// <https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-4>.
+/// The bytes from the assignment are interpreted in network order.
+#[no_mangle]
+pub extern "C" fn rustls_supported_ciphersuite_get_suite(
+    supported_ciphersuite: *const rustls_supported_ciphersuite,
+) -> u16 {
+    let supported_ciphersuite = try_ref_from_ptr!(supported_ciphersuite);
+    match supported_ciphersuite {
+        rustls::SupportedCipherSuite::Tls12(sc) => &sc.common,
+        rustls::SupportedCipherSuite::Tls13(sc) => &sc.common,
     }
+    .suite
+    .get_u16()
 }
 
 /// Returns the name of the ciphersuite as a `rustls_str`. If the provided
