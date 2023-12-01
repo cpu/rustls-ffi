@@ -19,6 +19,7 @@ use crate::cipher::{
     rustls_certified_key, rustls_client_cert_verifier, rustls_supported_ciphersuite,
 };
 use crate::connection::{rustls_connection, Connection};
+use crate::crypto::{default_provider, rustls_crypto_provider};
 use crate::error::rustls_result::{InvalidParameter, NullParameter};
 use crate::error::{map_error, rustls_result};
 use crate::rslice::{rustls_slice_bytes, rustls_slice_slice_bytes, rustls_slice_u16, rustls_str};
@@ -83,13 +84,35 @@ impl rustls_server_config_builder {
     pub extern "C" fn rustls_server_config_builder_new() -> *mut rustls_server_config_builder {
         ffi_panic_boundary! {
             let builder = ServerConfigBuilder {
-                           base: rustls::ServerConfig::builder(),
-                           verifier: WebPkiClientVerifier::no_client_auth(),
-                           cert_resolver: None,
-                           session_storage: None,
-                           alpn_protocols: vec![],
-                           ignore_client_order: None,
-                       };
+                base: rustls::ServerConfig::builder_with_provider(default_provider().provider.clone()).with_safe_default_protocol_versions().unwrap(),
+                verifier: WebPkiClientVerifier::no_client_auth(),
+                cert_resolver: None,
+                session_storage: None,
+                alpn_protocols: vec![],
+                ignore_client_order: None,
+            };
+            to_boxed_mut_ptr(builder)
+        }
+    }
+
+    /// Create a rustls_server_config_builder. Caller owns the memory and must
+    /// eventually call rustls_server_config_builder_build, then free the
+    /// resulting rustls_server_config. This uses rustls safe default values
+    /// for the cipher suites, key exchange groups and protocol versions.
+    #[no_mangle]
+    pub extern "C" fn rustls_server_config_builder_new_with_provider(
+        provider: *const rustls_crypto_provider,
+    ) -> *mut rustls_server_config_builder {
+        ffi_panic_boundary! {
+            let provider = try_clone_arc!(provider);
+            let builder = ServerConfigBuilder {
+                base: rustls::ServerConfig::builder_with_provider(provider.provider.clone()).with_safe_default_protocol_versions().unwrap(),
+                verifier: WebPkiClientVerifier::no_client_auth(),
+                cert_resolver: None,
+                session_storage: None,
+                alpn_protocols: vec![],
+                ignore_client_order: None,
+            };
             to_boxed_mut_ptr(builder)
         }
     }
@@ -110,6 +133,7 @@ impl rustls_server_config_builder {
     /// ownership. `len` is the number of consecutive `uint16_t` pointed to by `versions`.
     #[no_mangle]
     pub extern "C" fn rustls_server_config_builder_new_custom(
+        provider: *const rustls_crypto_provider,
         cipher_suites: *const *const rustls_supported_ciphersuite,
         cipher_suites_len: size_t,
         tls_versions: *const u16,
@@ -117,6 +141,7 @@ impl rustls_server_config_builder {
         builder_out: *mut *mut rustls_server_config_builder,
     ) -> rustls_result {
         ffi_panic_boundary! {
+            let provider = try_clone_arc!(provider);
             let cipher_suites: &[*const rustls_supported_ciphersuite] = try_slice!(cipher_suites, cipher_suites_len);
             let mut cs_vec: Vec<SupportedCipherSuite> = Vec::new();
             for &cs in cipher_suites.iter() {
@@ -138,11 +163,14 @@ impl rustls_server_config_builder {
                 }
             }
 
+            /*
+            TODO(@cpu): fixup...
             let provider = rustls::crypto::CryptoProvider{
                 cipher_suites: cs_vec,
                 ..rustls::crypto::ring::default_provider()
             };
-            let result = rustls::ServerConfig::builder_with_provider(provider.into())
+             */
+            let result = rustls::ServerConfig::builder_with_provider(provider.provider.clone())
                 .with_protocol_versions(&versions);
             let base = match result {
                 Ok(new) => new,
