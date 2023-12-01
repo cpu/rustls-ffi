@@ -21,6 +21,7 @@ pub struct rustls_crypto_provider {
 
 pub(crate) struct CryptoProvider {
     pub(crate) provider: rustls::crypto::CryptoProvider,
+    pub(crate) ciphersuites: Vec<*const rustls_supported_ciphersuite>,
 }
 
 impl Castable for rustls_crypto_provider {
@@ -29,12 +30,25 @@ impl Castable for rustls_crypto_provider {
 }
 
 impl rustls_crypto_provider {
+    fn provider_cipher_suites(
+        provider: &rustls::crypto::CryptoProvider,
+    ) -> Vec<*const rustls_supported_ciphersuite> {
+        provider
+            .cipher_suites
+            .iter()
+            .map(|cs| cs as *const SupportedCipherSuite as *const _)
+            .collect::<Vec<_>>()
+    }
+
     #[cfg(feature = "ring")]
     #[no_mangle]
     pub extern "C" fn rustls_crypto_provider_ring_new() -> *const rustls_crypto_provider {
         ffi_panic_boundary! {
+            let provider = rustls::crypto::ring::default_provider();
+            let ciphersuites = Self::provider_cipher_suites(&provider);
             to_arc_const_ptr(CryptoProvider {
-                provider: rustls::crypto::ring::default_provider()
+                provider,
+                ciphersuites,
             })
         }
     }
@@ -43,8 +57,11 @@ impl rustls_crypto_provider {
     #[no_mangle]
     pub extern "C" fn rustls_crypto_provider_aws_lc_rs_new() -> *const rustls_crypto_provider {
         ffi_panic_boundary! {
+            let provider = rustls::crypto::aws_lc_rs::default_provider();
+            let ciphersuites = Self::provider_cipher_suites(&provider);
             to_arc_const_ptr(CryptoProvider {
-                provider: rustls::crypto::aws_lc_rs::default_provider(),
+                provider,
+                ciphersuites,
             })
         }
     }
@@ -56,6 +73,8 @@ impl rustls_crypto_provider {
         cipher_suites_len: *mut size_t,
     ) -> rustls_result {
         ffi_panic_boundary! {
+            let provider = try_clone_arc!(provider);
+
             let cipher_suites: &mut *const *const rustls_supported_ciphersuite = unsafe {
                 match cipher_suites.as_mut() {
                     Some(c) => c,
@@ -69,13 +88,8 @@ impl rustls_crypto_provider {
                 }
             };
 
-            let provider = try_clone_arc!(provider);
-            let supported_cipher_suites = &provider.provider.cipher_suites.iter()
-                .map(|cs| cs as *const SupportedCipherSuite as *const _)
-                .collect::<Vec<_>>();
-
-            *cipher_suites = supported_cipher_suites.as_ptr();
-            *cipher_suites_len = supported_cipher_suites.len();
+            *cipher_suites = provider.ciphersuites.as_ptr();
+            *cipher_suites_len = provider.ciphersuites.len();
 
             rustls_result::Ok
         }
@@ -91,14 +105,21 @@ impl rustls_crypto_provider {
 
 #[cfg(feature = "ring")]
 pub(crate) fn default_provider() -> CryptoProvider {
+    let provider = rustls::crypto::ring::default_provider();
+    let ciphersuites = rustls_crypto_provider::provider_cipher_suites(&provider);
     CryptoProvider {
-        provider: rustls::crypto::ring::default_provider(),
+        provider,
+        ciphersuites,
     }
 }
+
 #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
 pub(crate) fn default_provider() -> CryptoProvider {
+    let provider = rustls::crypto::aws_lc_rs::default_provider();
+    let ciphersuites = rustls_crypto_provider::provider_cipher_suites(&provider);
     CryptoProvider {
-        provider: rustls::crypto::aws_lc_rs::default_provider(),
+        provider,
+        ciphersuites,
     }
 }
 
