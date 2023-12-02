@@ -209,6 +209,8 @@ typedef struct rustls_connection rustls_connection;
 
 typedef struct rustls_crypto_provider rustls_crypto_provider;
 
+typedef struct rustls_crypto_provider_builder rustls_crypto_provider_builder;
+
 /**
  * An alias for `struct iovec` from uio.h (on Unix) or `WSABUF` on Windows. You should cast
  * `const struct rustls_iovec *` to `const struct iovec *` on Unix, or `const *LPWSABUF`
@@ -1277,31 +1279,6 @@ struct rustls_client_config_builder *rustls_client_config_builder_new(void);
 struct rustls_client_config_builder *rustls_client_config_builder_new_with_provider(const struct rustls_crypto_provider *provider);
 
 /**
- * Create a rustls_client_config_builder. Caller owns the memory and must
- * eventually call rustls_client_config_builder_build, then free the
- * resulting rustls_client_config. Specify cipher suites in preference
- * order; the `cipher_suites` parameter must point to an array containing
- * `len` pointers to `rustls_supported_ciphersuite` previously obtained
- * from `rustls_all_ciphersuites_get_entry()`, or to a provided array,
- * RUSTLS_DEFAULT_CIPHER_SUITES or RUSTLS_ALL_CIPHER_SUITES. Set the TLS
- * protocol versions to use when negotiating a TLS session.
- *
- * `tls_version` is the version of the protocol, as defined in rfc8446,
- * ch. 4.2.1 and end of ch. 5.1. Some values are defined in
- * `rustls_tls_version` for convenience, and the arrays
- * RUSTLS_DEFAULT_VERSIONS or RUSTLS_ALL_VERSIONS can be used directly.
- *
- * `versions` will only be used during the call and the application retains
- * ownership. `len` is the number of consecutive `uint16_t` pointed to by `versions`.
- */
-rustls_result rustls_client_config_builder_new_custom(const struct rustls_crypto_provider *provider,
-                                                      const struct rustls_supported_ciphersuite *const *cipher_suites,
-                                                      size_t cipher_suites_len,
-                                                      const uint16_t *tls_versions,
-                                                      size_t tls_versions_len,
-                                                      struct rustls_client_config_builder **builder_out);
-
-/**
  * Set a custom server certificate verifier.
  *
  * The callback must not capture any of the pointers in its
@@ -1634,6 +1611,13 @@ rustls_result rustls_connection_read_2(struct rustls_connection *conn,
  */
 void rustls_connection_free(struct rustls_connection *conn);
 
+struct rustls_crypto_provider_builder *rustls_crypto_provider_builder_new(void);
+
+rustls_result rustls_crypto_provider_builder_build(struct rustls_crypto_provider_builder *builder,
+                                                   const struct rustls_crypto_provider **provider_out);
+
+void rustls_crypto_provider_builder_free(struct rustls_crypto_provider_builder *builder);
+
 #if defined(DEFINE_RING)
 const struct rustls_crypto_provider *rustls_crypto_provider_ring_new(void);
 #endif
@@ -1705,29 +1689,6 @@ struct rustls_server_config_builder *rustls_server_config_builder_new(void);
  * for the cipher suites, key exchange groups and protocol versions.
  */
 struct rustls_server_config_builder *rustls_server_config_builder_new_with_provider(const struct rustls_crypto_provider *provider);
-
-/**
- * Create a rustls_server_config_builder. Caller owns the memory and must
- * eventually call rustls_server_config_builder_build, then free the
- * resulting rustls_server_config. Specify cipher suites in preference
- * order; the `cipher_suites` parameter must point to an array containing
- * `len` pointers to `rustls_supported_ciphersuite` previously obtained
- * from `rustls_all_ciphersuites_get_entry()`. Set the TLS protocol
- * versions to use when negotiating a TLS session.
- *
- * `tls_version` is the version of the protocol, as defined in rfc8446,
- * ch. 4.2.1 and end of ch. 5.1. Some values are defined in
- * `rustls_tls_version` for convenience.
- *
- * `versions` will only be used during the call and the application retains
- * ownership. `len` is the number of consecutive `uint16_t` pointed to by `versions`.
- */
-rustls_result rustls_server_config_builder_new_custom(const struct rustls_crypto_provider *provider,
-                                                      const struct rustls_supported_ciphersuite *const *cipher_suites,
-                                                      size_t cipher_suites_len,
-                                                      const uint16_t *tls_versions,
-                                                      size_t tls_versions_len,
-                                                      struct rustls_server_config_builder **builder_out);
 
 /**
  * Create a rustls_server_config_builder for TLS sessions that may verify client

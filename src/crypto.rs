@@ -1,13 +1,83 @@
 use libc::size_t;
-use rustls::SupportedCipherSuite;
 use std::sync::Arc;
+
+use rustls::SupportedCipherSuite;
 
 use crate::cipher::rustls_supported_ciphersuite;
 use crate::rustls_result::NullParameter;
 use crate::{
-    ffi_panic_boundary, free_arc, rustls_result, to_arc_const_ptr, try_clone_arc, Castable,
-    OwnershipArc,
+    ffi_panic_boundary, free_arc, free_box, rustls_result, set_arc_mut_ptr, to_arc_const_ptr,
+    to_boxed_mut_ptr, try_clone_arc, try_mut_from_ptr, try_take, Castable, OwnershipArc,
+    OwnershipBox,
 };
+
+pub struct rustls_crypto_provider_builder {
+    // We use the opaque struct pattern to tell C about our types without
+    // telling them what's inside.
+    // https://doc.rust-lang.org/nomicon/ffi.html#representing-opaque-structs
+    _private: [u8; 0],
+}
+
+impl Castable for rustls_crypto_provider_builder {
+    type Ownership = OwnershipBox;
+    type RustType = Option<CryptoProviderBuilder>;
+}
+
+pub(crate) struct CryptoProviderBuilder {
+    pub(crate) default_provider: rustls::crypto::CryptoProvider,
+}
+
+impl CryptoProviderBuilder {
+    #[no_mangle]
+    pub extern "C" fn rustls_crypto_provider_builder_new() -> *mut rustls_crypto_provider_builder {
+        ffi_panic_boundary! {
+            let default_provider = Self::default_provider();
+            to_boxed_mut_ptr(Some(CryptoProviderBuilder { default_provider }))
+        }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn rustls_crypto_provider_builder_build(
+        builder: *mut rustls_crypto_provider_builder,
+        provider_out: *mut *const rustls_crypto_provider,
+    ) -> rustls_result {
+        ffi_panic_boundary! {
+            let builder = try_mut_from_ptr!(builder);
+            let builder = try_take!(builder);
+
+            let provider = Arc::new(rustls::crypto::CryptoProvider{
+                ..builder.default_provider
+            });
+            let ciphersuites = rustls_crypto_provider::provider_cipher_suites(&provider);
+            let provider = CryptoProvider{
+                provider,
+                ciphersuites
+            };
+
+            set_arc_mut_ptr(provider_out, provider);
+            rustls_result::Ok
+        }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn rustls_crypto_provider_builder_free(
+        builder: *mut rustls_crypto_provider_builder,
+    ) {
+        ffi_panic_boundary! {
+            free_box(builder);
+        }
+    }
+
+    #[cfg(feature = "ring")]
+    pub(crate) fn default_provider() -> rustls::crypto::CryptoProvider {
+        rustls::crypto::ring::default_provider()
+    }
+
+    #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
+    pub(crate) fn default_provider() -> rustls::crypto::CryptoProvider {
+        rustls::crypto::aws_lc_rs::default_provider()
+    }
+}
 
 pub struct rustls_crypto_provider {
     // We use the opaque struct pattern to tell C about our types without
@@ -41,10 +111,10 @@ impl rustls_crypto_provider {
     #[no_mangle]
     pub extern "C" fn rustls_crypto_provider_ring_new() -> *const rustls_crypto_provider {
         ffi_panic_boundary! {
-            let provider = rustls::crypto::ring::default_provider();
+            let provider = Arc::new(rustls::crypto::ring::default_provider());
             let ciphersuites = Self::provider_cipher_suites(&provider);
             to_arc_const_ptr(CryptoProvider {
-                provider: provider.into(),
+                provider,
                 ciphersuites,
             })
         }
@@ -54,10 +124,10 @@ impl rustls_crypto_provider {
     #[no_mangle]
     pub extern "C" fn rustls_crypto_provider_aws_lc_rs_new() -> *const rustls_crypto_provider {
         ffi_panic_boundary! {
-            let provider = rustls::crypto::aws_lc_rs::default_provider();
+            let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
             let ciphersuites = Self::provider_cipher_suites(&provider);
             to_arc_const_ptr(CryptoProvider {
-                provider: provider.into(),
+                provider,
                 ciphersuites,
             })
         }
