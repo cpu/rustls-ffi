@@ -128,7 +128,9 @@ impl rustls_client_config_builder {
     pub extern "C" fn rustls_client_config_builder_new() -> *mut rustls_client_config_builder {
         ffi_panic_boundary! {
             let builder = ClientConfigBuilder {
-                base: rustls::ClientConfig::builder_with_provider(default_provider().provider).with_safe_default_protocol_versions().unwrap(),
+                base: rustls::ClientConfig::builder_with_provider(default_provider().provider.into())
+                    .with_safe_default_protocol_versions()
+                    .unwrap(),
                 verifier: Arc::new(NoneVerifier),
                 cert_resolver: None,
                 alpn_protocols: vec![],
@@ -154,7 +156,9 @@ impl rustls_client_config_builder {
         ffi_panic_boundary! {
             let provider = try_clone_arc!(provider);
             let builder = ClientConfigBuilder {
-                base: rustls::ClientConfig::builder_with_provider(provider.provider.clone()).with_safe_default_protocol_versions().unwrap(),
+                base: rustls::ClientConfig::builder_with_provider(provider.provider.clone().into())
+                    .with_safe_default_protocol_versions()
+                    .unwrap(),
                 verifier: Arc::new(NoneVerifier),
                 cert_resolver: None,
                 alpn_protocols: vec![],
@@ -212,13 +216,11 @@ impl rustls_client_config_builder {
                 }
             }
 
-            // TODO(@cpu): Fix....
-            /*
             let custom_provider = rustls::crypto::CryptoProvider{
                 cipher_suites: cs_vec,
-                ..default_provider().provider // TODO(@cpu): fix to use provider arg.
-            };*/
-            let result = rustls::ClientConfig::builder_with_provider(provider.provider.clone())
+                ..provider.provider.clone()
+            };
+            let result = rustls::ClientConfig::builder_with_provider(custom_provider.into())
                 .with_protocol_versions(&versions);
             let base = match result {
                 Ok(new) => new,

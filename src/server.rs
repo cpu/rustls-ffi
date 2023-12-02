@@ -84,7 +84,9 @@ impl rustls_server_config_builder {
     pub extern "C" fn rustls_server_config_builder_new() -> *mut rustls_server_config_builder {
         ffi_panic_boundary! {
             let builder = ServerConfigBuilder {
-                base: rustls::ServerConfig::builder_with_provider(default_provider().provider.clone()).with_safe_default_protocol_versions().unwrap(),
+                base: rustls::ServerConfig::builder_with_provider(default_provider().provider.into())
+                    .with_safe_default_protocol_versions()
+                    .unwrap(),
                 verifier: WebPkiClientVerifier::no_client_auth(),
                 cert_resolver: None,
                 session_storage: None,
@@ -106,7 +108,9 @@ impl rustls_server_config_builder {
         ffi_panic_boundary! {
             let provider = try_clone_arc!(provider);
             let builder = ServerConfigBuilder {
-                base: rustls::ServerConfig::builder_with_provider(provider.provider.clone()).with_safe_default_protocol_versions().unwrap(),
+                base: rustls::ServerConfig::builder_with_provider(provider.provider.clone().into())
+                    .with_safe_default_protocol_versions()
+                    .unwrap(),
                 verifier: WebPkiClientVerifier::no_client_auth(),
                 cert_resolver: None,
                 session_storage: None,
@@ -163,14 +167,12 @@ impl rustls_server_config_builder {
                 }
             }
 
-            /*
-            TODO(@cpu): fixup...
-            let provider = rustls::crypto::CryptoProvider{
+            let custom_provider = rustls::crypto::CryptoProvider{
                 cipher_suites: cs_vec,
-                ..rustls::crypto::ring::default_provider()
+                ..provider.provider.clone()
             };
-             */
-            let result = rustls::ServerConfig::builder_with_provider(provider.provider.clone())
+
+            let result = rustls::ServerConfig::builder_with_provider(custom_provider.into())
                 .with_protocol_versions(&versions);
             let base = match result {
                 Ok(new) => new,
