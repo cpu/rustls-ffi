@@ -83,7 +83,7 @@ impl rustls_server_config_builder {
     pub extern "C" fn rustls_server_config_builder_new() -> *mut rustls_server_config_builder {
         ffi_panic_boundary! {
             let builder = ServerConfigBuilder {
-                base: rustls::ServerConfig::builder_with_provider(default_provider().provider.into())
+                base: rustls::ServerConfig::builder_with_provider(default_provider().provider)
                     .with_safe_default_protocol_versions()
                     .unwrap(),
                 verifier: WebPkiClientVerifier::no_client_auth(),
@@ -107,7 +107,7 @@ impl rustls_server_config_builder {
         ffi_panic_boundary! {
             let provider = try_clone_arc!(provider);
             let builder = ServerConfigBuilder {
-                base: rustls::ServerConfig::builder_with_provider(provider.provider.clone().into())
+                base: rustls::ServerConfig::builder_with_provider(provider.provider.clone())
                     .with_safe_default_protocol_versions()
                     .unwrap(),
                 verifier: WebPkiClientVerifier::no_client_auth(),
@@ -120,6 +120,7 @@ impl rustls_server_config_builder {
         }
     }
 
+    /*
     /// Create a rustls_server_config_builder. Caller owns the memory and must
     /// eventually call rustls_server_config_builder_build, then free the
     /// resulting rustls_server_config. Specify cipher suites in preference
@@ -189,7 +190,7 @@ impl rustls_server_config_builder {
             set_boxed_mut_ptr(builder_out, builder);
             rustls_result::Ok
         }
-    }
+    }*/
 
     /// Create a rustls_server_config_builder for TLS sessions that may verify client
     /// certificates. This increases the refcount of `verifier` and doesn't take ownership.

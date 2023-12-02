@@ -1,5 +1,6 @@
 use libc::size_t;
 use rustls::SupportedCipherSuite;
+use std::sync::Arc;
 
 use crate::cipher::rustls_supported_ciphersuite;
 use crate::rustls_result::NullParameter;
@@ -16,7 +17,7 @@ pub struct rustls_crypto_provider {
 }
 
 pub(crate) struct CryptoProvider {
-    pub(crate) provider: rustls::crypto::CryptoProvider,
+    pub(crate) provider: Arc<rustls::crypto::CryptoProvider>,
     pub(crate) ciphersuites: Vec<*const rustls_supported_ciphersuite>,
 }
 
@@ -43,7 +44,7 @@ impl rustls_crypto_provider {
             let provider = rustls::crypto::ring::default_provider();
             let ciphersuites = Self::provider_cipher_suites(&provider);
             to_arc_const_ptr(CryptoProvider {
-                provider,
+                provider: provider.into(),
                 ciphersuites,
             })
         }
@@ -56,7 +57,7 @@ impl rustls_crypto_provider {
             let provider = rustls::crypto::aws_lc_rs::default_provider();
             let ciphersuites = Self::provider_cipher_suites(&provider);
             to_arc_const_ptr(CryptoProvider {
-                provider,
+                provider: provider.into(),
                 ciphersuites,
             })
         }
@@ -104,7 +105,7 @@ pub(crate) fn default_provider() -> CryptoProvider {
     let provider = rustls::crypto::ring::default_provider();
     let ciphersuites = rustls_crypto_provider::provider_cipher_suites(&provider);
     CryptoProvider {
-        provider,
+        provider: provider.into(),
         ciphersuites,
     }
 }

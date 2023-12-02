@@ -127,7 +127,7 @@ impl rustls_client_config_builder {
     pub extern "C" fn rustls_client_config_builder_new() -> *mut rustls_client_config_builder {
         ffi_panic_boundary! {
             let builder = ClientConfigBuilder {
-                base: rustls::ClientConfig::builder_with_provider(default_provider().provider.into())
+                base: rustls::ClientConfig::builder_with_provider(default_provider().provider)
                     .with_safe_default_protocol_versions()
                     .unwrap(),
                 verifier: Arc::new(NoneVerifier),
@@ -155,7 +155,7 @@ impl rustls_client_config_builder {
         ffi_panic_boundary! {
             let provider = try_clone_arc!(provider);
             let builder = ClientConfigBuilder {
-                base: rustls::ClientConfig::builder_with_provider(provider.provider.clone().into())
+                base: rustls::ClientConfig::builder_with_provider(provider.provider.clone())
                     .with_safe_default_protocol_versions()
                     .unwrap(),
                 verifier: Arc::new(NoneVerifier),
@@ -167,6 +167,7 @@ impl rustls_client_config_builder {
         }
     }
 
+    /*
     /// Create a rustls_client_config_builder. Caller owns the memory and must
     /// eventually call rustls_client_config_builder_build, then free the
     /// resulting rustls_client_config. Specify cipher suites in preference
@@ -236,7 +237,7 @@ impl rustls_client_config_builder {
             set_boxed_mut_ptr(builder_out, config_builder);
             rustls_result::Ok
         }
-    }
+    }*/
 }
 
 /// Input to a custom certificate verifier callback. See
