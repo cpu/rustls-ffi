@@ -16,6 +16,12 @@ ifeq ($(CC), clang)
 	LDFLAGS += -fsanitize=address
 endif
 
+ifeq ($(CC), gcc)
+ifeq ($(CRYPTO_PROVIDER), $(filter $(CRYPTO_PROVIDER), aws_lc_rs all))
+	RUST_CFLAGS="-Wno-error=stringop-overflow"
+endif
+endif
+
 ifeq ($(PROFILE), release)
 	CFLAGS += -O3
 	CARGOFLAGS += --release
@@ -52,7 +58,7 @@ src/rustls.h: src/*.rs cbindgen.toml
 	cbindgen --lang C > $@
 
 target/$(PROFILE)/librustls_ffi.a: src/*.rs Cargo.toml
-	RUSTFLAGS="-C metadata=rustls-ffi" CFLAGS="-Wno-error=stringop-overflow" ${CARGO} build $(CARGOFLAGS)
+	RUSTFLAGS="-C metadata=rustls-ffi" CFLAGS=${RUST_CFLAGS} ${CARGO} build $(CARGOFLAGS)
 
 target/%.o: tests/%.c tests/common.h | target
 	$(CC) -o $@ -c $< $(CFLAGS)
