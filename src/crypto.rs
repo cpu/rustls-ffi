@@ -1,4 +1,5 @@
 use libc::size_t;
+use std::slice;
 use std::sync::Arc;
 
 use rustls::SupportedCipherSuite;
@@ -6,9 +7,8 @@ use rustls::SupportedCipherSuite;
 use crate::cipher::rustls_supported_ciphersuite;
 use crate::rustls_result::NullParameter;
 use crate::{
-    ffi_panic_boundary, free_arc, free_box, rustls_result, set_arc_mut_ptr, to_arc_const_ptr,
-    to_boxed_mut_ptr, try_clone_arc, try_mut_from_ptr, try_take, Castable, OwnershipArc,
-    OwnershipBox,
+    ffi_panic_boundary, free_arc, free_box, rustls_result, set_arc_mut_ptr, to_boxed_mut_ptr,
+    try_clone_arc, try_mut_from_ptr, try_slice, try_take, Castable, OwnershipArc, OwnershipBox,
 };
 
 pub struct rustls_crypto_provider_builder {
@@ -25,7 +25,7 @@ impl Castable for rustls_crypto_provider_builder {
 
 pub(crate) struct CryptoProviderBuilder {
     default_provider: rustls::crypto::CryptoProvider,
-    ciphersuites: Vec<SupportedCipherSuite>,
+    cipher_suites: Vec<*const rustls_supported_ciphersuite>,
 }
 
 impl CryptoProviderBuilder {
@@ -53,6 +53,26 @@ impl CryptoProviderBuilder {
         }
     }
 
+    /// Specify cipher suites in preference
+    /// order; the `cipher_suites` parameter must point to an array containing
+    /// `len` pointers to `rustls_supported_ciphersuite` previously obtained
+    /// from `rustls_all_ciphersuites_get_entry()`, or to a provided array,
+    /// RUSTLS_DEFAULT_CIPHER_SUITES or RUSTLS_ALL_CIPHER_SUITES.
+    #[no_mangle]
+    pub extern "C" fn rustls_crypto_provider_builder_set_cipher_suites(
+        builder: *mut rustls_crypto_provider_builder,
+        cipher_suites: *const *const rustls_supported_ciphersuite,
+        cipher_suites_len: size_t,
+    ) -> rustls_result {
+        ffi_panic_boundary! {
+            let builder = try_mut_from_ptr!(builder);
+            let mut builder = try_take!(builder);
+
+            builder.cipher_suites = try_slice!(cipher_suites, cipher_suites_len).to_vec();
+            rustls_result::Ok
+        }
+    }
+
     #[no_mangle]
     pub extern "C" fn rustls_crypto_provider_builder_build(
         builder: *mut rustls_crypto_provider_builder,
@@ -61,15 +81,7 @@ impl CryptoProviderBuilder {
         ffi_panic_boundary! {
             let builder = try_mut_from_ptr!(builder);
             let builder = try_take!(builder);
-
-            let provider = Arc::new(rustls::crypto::CryptoProvider{
-                ..builder.default_provider
-            });
-            let ciphersuites = rustls_crypto_provider::provider_cipher_suites(&provider);
-            let provider = CryptoProvider{
-                provider,
-                ciphersuites
-            };
+            let provider = builder.build();
 
             set_arc_mut_ptr(provider_out, provider);
             rustls_result::Ok
@@ -88,7 +100,7 @@ impl CryptoProviderBuilder {
     pub(crate) fn new() -> CryptoProviderBuilder {
         CryptoProviderBuilder {
             default_provider: Self::default_provider(),
-            ciphersuites: Vec::new(),
+            cipher_suites: Vec::new(),
         }
     }
 
@@ -96,7 +108,7 @@ impl CryptoProviderBuilder {
     pub(crate) fn new_with_ring() -> CryptoProviderBuilder {
         CryptoProviderBuilder {
             default_provider: rustls::crypto::ring::default_provider(),
-            ciphersuites: Vec::new(),
+            cipher_suites: Vec::new(),
         }
     }
 
@@ -104,17 +116,23 @@ impl CryptoProviderBuilder {
     pub(crate) fn new_with_aws_lc_rs() -> CryptoProviderBuilder {
         CryptoProviderBuilder {
             default_provider: rustls::crypto::aws_lc_rs::default_provider(),
-            ciphersuites: Vec::new(),
+            cipher_suites: Vec::new(),
         }
     }
 
     pub(crate) fn build(self) -> CryptoProvider {
-        let provider = Arc::new(rustls::crypto::CryptoProvider {
-            ..self.default_provider
-        });
-        let ciphersuites = rustls_crypto_provider::provider_cipher_suites(&provider);
+        let ciphersuites = if self.cipher_suites.is_empty() {
+            self.default_provider
+                .cipher_suites
+                .iter()
+                .map(|cs| cs as *const SupportedCipherSuite as *const _)
+                .collect::<Vec<_>>()
+        } else {
+            self.cipher_suites
+        };
+
         CryptoProvider {
-            provider,
+            provider: self.default_provider.into(),
             ciphersuites,
         }
     }
@@ -148,16 +166,6 @@ impl Castable for rustls_crypto_provider {
 }
 
 impl rustls_crypto_provider {
-    fn provider_cipher_suites(
-        provider: &rustls::crypto::CryptoProvider,
-    ) -> Vec<*const rustls_supported_ciphersuite> {
-        provider
-            .cipher_suites
-            .iter()
-            .map(|cs| cs as *const SupportedCipherSuite as *const _)
-            .collect::<Vec<_>>()
-    }
-
     #[no_mangle]
     pub extern "C" fn rustls_crypto_provider_cipher_suites(
         provider: *const rustls_crypto_provider,

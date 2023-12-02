@@ -12,14 +12,12 @@ use rustls::server::{
     WebPkiClientVerifier,
 };
 use rustls::sign::CertifiedKey;
-use rustls::{ProtocolVersion, SignatureScheme, SupportedCipherSuite, WantsVerifier};
+use rustls::{ProtocolVersion, SignatureScheme, WantsVerifier};
 
-use crate::cipher::{
-    rustls_certified_key, rustls_client_cert_verifier, rustls_supported_ciphersuite,
-};
+use crate::cipher::{rustls_certified_key, rustls_client_cert_verifier};
 use crate::connection::{rustls_connection, Connection};
 use crate::crypto::{default_provider, rustls_crypto_provider};
-use crate::error::rustls_result::{InvalidParameter, NullParameter};
+use crate::error::rustls_result::NullParameter;
 use crate::error::{map_error, rustls_result};
 use crate::rslice::{rustls_slice_bytes, rustls_slice_slice_bytes, rustls_slice_u16, rustls_str};
 use crate::session::{
@@ -120,14 +118,10 @@ impl rustls_server_config_builder {
         }
     }
 
-    /*
     /// Create a rustls_server_config_builder. Caller owns the memory and must
     /// eventually call rustls_server_config_builder_build, then free the
-    /// resulting rustls_server_config. Specify cipher suites in preference
-    /// order; the `cipher_suites` parameter must point to an array containing
-    /// `len` pointers to `rustls_supported_ciphersuite` previously obtained
-    /// from `rustls_all_ciphersuites_get_entry()`. Set the TLS protocol
-    /// versions to use when negotiating a TLS session.
+    /// resulting rustls_server_config. Set the TLS protocol versions to use
+    /// when negotiating a TLS session.
     ///
     /// `tls_version` is the version of the protocol, as defined in rfc8446,
     /// ch. 4.2.1 and end of ch. 5.1. Some values are defined in
@@ -138,23 +132,12 @@ impl rustls_server_config_builder {
     #[no_mangle]
     pub extern "C" fn rustls_server_config_builder_new_custom(
         provider: *const rustls_crypto_provider,
-        cipher_suites: *const *const rustls_supported_ciphersuite,
-        cipher_suites_len: size_t,
         tls_versions: *const u16,
         tls_versions_len: size_t,
         builder_out: *mut *mut rustls_server_config_builder,
     ) -> rustls_result {
         ffi_panic_boundary! {
             let provider = try_clone_arc!(provider);
-            let cipher_suites: &[*const rustls_supported_ciphersuite] = try_slice!(cipher_suites, cipher_suites_len);
-            let mut cs_vec: Vec<SupportedCipherSuite> = Vec::new();
-            for &cs in cipher_suites.iter() {
-                let cs = try_ref_from_ptr!(cs);
-                match provider.provider.cipher_suites.iter().find(|acs| cs.eq(acs)) {
-                    Some(scs) => cs_vec.push(*scs),
-                    None => return InvalidParameter,
-                }
-            }
 
             let tls_versions: &[u16] = try_slice!(tls_versions, tls_versions_len);
             let mut versions = vec![];
@@ -167,12 +150,7 @@ impl rustls_server_config_builder {
                 }
             }
 
-            let custom_provider = rustls::crypto::CryptoProvider{
-                cipher_suites: cs_vec,
-                ..provider.provider.clone()
-            };
-
-            let result = rustls::ServerConfig::builder_with_provider(custom_provider.into())
+            let result = rustls::ServerConfig::builder_with_provider(provider.provider.clone())
                 .with_protocol_versions(&versions);
             let base = match result {
                 Ok(new) => new,
@@ -190,7 +168,7 @@ impl rustls_server_config_builder {
             set_boxed_mut_ptr(builder_out, builder);
             rustls_result::Ok
         }
-    }*/
+    }
 
     /// Create a rustls_server_config_builder for TLS sessions that may verify client
     /// certificates. This increases the refcount of `verifier` and doesn't take ownership.
