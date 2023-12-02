@@ -81,7 +81,7 @@ impl rustls_server_config_builder {
     pub extern "C" fn rustls_server_config_builder_new() -> *mut rustls_server_config_builder {
         ffi_panic_boundary! {
             let builder = ServerConfigBuilder {
-                base: rustls::ServerConfig::builder_with_provider(default_provider().provider.clone())
+                base: rustls::ServerConfig::builder_with_provider(default_provider().provider)
                     .with_safe_default_protocol_versions()
                     .unwrap(),
                 verifier: WebPkiClientVerifier::no_client_auth(),

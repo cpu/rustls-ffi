@@ -873,7 +873,7 @@ impl rustls_web_pki_client_cert_verifier_builder {
             let client_verifier_builder = try_take!(client_verifier_builder);
 
             let mut builder = WebPkiClientVerifier::builder_with_provider(
-                    client_verifier_builder.roots, client_verifier_builder.provider.provider.clone().into()
+                    client_verifier_builder.roots, client_verifier_builder.provider.provider.clone()
                 )
                 .with_crls(client_verifier_builder.crls);
             match client_verifier_builder.revocation_depth {
@@ -1113,7 +1113,7 @@ impl ServerCertVerifierBuilder {
             let server_verifier_builder = try_take!(server_verifier_builder);
 
             let mut builder = WebPkiServerVerifier::builder_with_provider(
-                    server_verifier_builder.roots, server_verifier_builder.provider.provider.clone().into()
+                    server_verifier_builder.roots, server_verifier_builder.provider.provider.clone()
                 )
                 .with_crls(server_verifier_builder.crls);
             match server_verifier_builder.revocation_depth {
