@@ -20,5 +20,5 @@ ExternalProject_Add(
 	# of "error" in stdout as an error, and we have some test functions that
 	# end in "_error". Quiet mode suppresses test names, so this is a
 	# sufficient workaround.
-	TEST_COMMAND cargo test --ignored --locked "$<IF:$<CONFIG:Release>,--release,-->" --quiet
+	TEST_COMMAND cargo test --locked "$<IF:$<CONFIG:Release>,--release,-->" --quiet -- --ignored
 )
