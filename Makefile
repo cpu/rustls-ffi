@@ -52,7 +52,7 @@ src/rustls.h: src/*.rs cbindgen.toml
 	cbindgen --lang C > $@
 
 target/$(PROFILE)/librustls_ffi.a: src/*.rs Cargo.toml
-	RUSTFLAGS="-C metadata=rustls-ffi" ${CARGO} build $(CARGOFLAGS)
+	RUSTFLAGS="-C metadata=rustls-ffi" CFLAGS="-Wno-error=stringop-overflow" ${CARGO} build $(CARGOFLAGS)
 
 target/%.o: tests/%.c tests/common.h | target
 	$(CC) -o $@ -c $< $(CFLAGS)
