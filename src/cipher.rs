@@ -86,12 +86,7 @@ pub extern "C" fn rustls_supported_ciphersuite_get_suite(
     supported_ciphersuite: *const rustls_supported_ciphersuite,
 ) -> u16 {
     let supported_ciphersuite = try_ref_from_ptr!(supported_ciphersuite);
-    match supported_ciphersuite {
-        rustls::SupportedCipherSuite::Tls12(sc) => &sc.common,
-        rustls::SupportedCipherSuite::Tls13(sc) => &sc.common,
-    }
-    .suite
-    .get_u16()
+    supported_ciphersuite.suite().get_u16()
 }
 
 /// Returns the name of the ciphersuite as a `rustls_str`. If the provided
