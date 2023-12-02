@@ -8,7 +8,8 @@ use crate::cipher::rustls_supported_ciphersuite;
 use crate::rustls_result::NullParameter;
 use crate::{
     ffi_panic_boundary, free_arc, free_box, rustls_result, set_arc_mut_ptr, to_boxed_mut_ptr,
-    try_clone_arc, try_mut_from_ptr, try_slice, try_take, Castable, OwnershipArc, OwnershipBox,
+    try_clone_arc, try_mut_from_ptr, try_ref_from_ptr, try_slice, try_take, Castable, OwnershipArc,
+    OwnershipBox,
 };
 
 pub struct rustls_crypto_provider_builder {
@@ -25,7 +26,7 @@ impl Castable for rustls_crypto_provider_builder {
 
 pub(crate) struct CryptoProviderBuilder {
     default_provider: rustls::crypto::CryptoProvider,
-    cipher_suites: Vec<*const rustls_supported_ciphersuite>,
+    cipher_suites: Vec<SupportedCipherSuite>,
 }
 
 impl CryptoProviderBuilder {
@@ -68,7 +69,14 @@ impl CryptoProviderBuilder {
             let builder = try_mut_from_ptr!(builder);
             let mut builder = try_take!(builder);
 
-            builder.cipher_suites = try_slice!(cipher_suites, cipher_suites_len).to_vec();
+            let cipher_suites = try_slice!(cipher_suites, cipher_suites_len).to_vec();
+            let mut supported_cipher_suites = Vec::new();
+            for cs in cipher_suites {
+                let cs = try_ref_from_ptr!(cs);
+                supported_cipher_suites.push(*cs);
+            }
+
+            builder.cipher_suites = supported_cipher_suites;
             rustls_result::Ok
         }
     }
@@ -98,42 +106,46 @@ impl CryptoProviderBuilder {
     }
 
     pub(crate) fn new() -> CryptoProviderBuilder {
+        let default_provider = Self::default_provider();
         CryptoProviderBuilder {
-            default_provider: Self::default_provider(),
-            cipher_suites: Vec::new(),
+            cipher_suites: default_provider.cipher_suites.clone(),
+            default_provider,
         }
     }
 
     #[cfg(feature = "ring")]
     pub(crate) fn new_with_ring() -> CryptoProviderBuilder {
+        let default_provider = rustls::crypto::ring::default_provider();
         CryptoProviderBuilder {
-            default_provider: rustls::crypto::ring::default_provider(),
-            cipher_suites: Vec::new(),
+            cipher_suites: default_provider.cipher_suites.clone(),
+            default_provider,
         }
     }
 
     #[cfg(feature = "aws_lc_rs")]
     pub(crate) fn new_with_aws_lc_rs() -> CryptoProviderBuilder {
+        let default_provider = rustls::crypto::aws_lc_rs::default_provider();
         CryptoProviderBuilder {
-            default_provider: rustls::crypto::aws_lc_rs::default_provider(),
-            cipher_suites: Vec::new(),
+            cipher_suites: default_provider.cipher_suites.clone(),
+            default_provider,
         }
     }
 
     pub(crate) fn build(self) -> CryptoProvider {
-        let ciphersuites = if self.cipher_suites.is_empty() {
-            self.default_provider
-                .cipher_suites
-                .iter()
-                .map(|cs| cs as *const SupportedCipherSuite as *const _)
-                .collect::<Vec<_>>()
-        } else {
-            self.cipher_suites
-        };
+        let cipher_suites = self
+            .cipher_suites
+            .iter()
+            .map(|cs| cs as *const SupportedCipherSuite as *const _)
+            .collect::<Vec<_>>();
+
+        let provider = Arc::new(rustls::crypto::CryptoProvider {
+            cipher_suites: self.cipher_suites,
+            ..self.default_provider
+        });
 
         CryptoProvider {
-            provider: self.default_provider.into(),
-            ciphersuites,
+            provider,
+            cipher_suites,
         }
     }
 
@@ -157,7 +169,7 @@ pub struct rustls_crypto_provider {
 
 pub(crate) struct CryptoProvider {
     pub(crate) provider: Arc<rustls::crypto::CryptoProvider>,
-    pub(crate) ciphersuites: Vec<*const rustls_supported_ciphersuite>,
+    pub(crate) cipher_suites: Vec<*const rustls_supported_ciphersuite>,
 }
 
 impl Castable for rustls_crypto_provider {
@@ -188,8 +200,8 @@ impl rustls_crypto_provider {
                 }
             };
 
-            *cipher_suites = provider.ciphersuites.as_ptr();
-            *cipher_suites_len = provider.ciphersuites.len();
+            *cipher_suites = provider.cipher_suites.as_ptr();
+            *cipher_suites_len = provider.cipher_suites.len();
 
             rustls_result::Ok
         }

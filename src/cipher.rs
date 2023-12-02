@@ -116,7 +116,7 @@ mod tests {
     #[test]
     fn ciphersuite_get_name() {
         let provider = default_provider();
-        let suite = provider.ciphersuites[0];
+        let suite = provider.cipher_suites[0];
         let s = rustls_supported_ciphersuite_get_name(suite);
         let want = "TLS13_AES_256_GCM_SHA384";
         unsafe {
@@ -128,7 +128,7 @@ mod tests {
     #[test]
     fn ciphersuite_get_suite() {
         let provider = default_provider();
-        let suite = provider.ciphersuites[0];
+        let suite = provider.cipher_suites[0];
         let got = rustls_supported_ciphersuite_get_suite(suite);
         assert_eq!(0x1302, got);
     }
