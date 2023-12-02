@@ -24,15 +24,32 @@ impl Castable for rustls_crypto_provider_builder {
 }
 
 pub(crate) struct CryptoProviderBuilder {
-    pub(crate) default_provider: rustls::crypto::CryptoProvider,
+    default_provider: rustls::crypto::CryptoProvider,
+    ciphersuites: Vec<SupportedCipherSuite>,
 }
 
 impl CryptoProviderBuilder {
     #[no_mangle]
     pub extern "C" fn rustls_crypto_provider_builder_new() -> *mut rustls_crypto_provider_builder {
         ffi_panic_boundary! {
-            let default_provider = Self::default_provider();
-            to_boxed_mut_ptr(Some(CryptoProviderBuilder { default_provider }))
+            to_boxed_mut_ptr(Some(CryptoProviderBuilder::new()))
+        }
+    }
+
+    #[no_mangle]
+    #[cfg(feature = "ring")]
+    pub extern "C" fn rustls_crypto_provider_builder_ring() -> *mut rustls_crypto_provider_builder {
+        ffi_panic_boundary! {
+            to_boxed_mut_ptr(Some(CryptoProviderBuilder::new_with_ring()))
+        }
+    }
+
+    #[no_mangle]
+    #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
+    pub extern "C" fn rustls_crypto_provider_builder_aws_lc_rs(
+    ) -> *mut rustls_crypto_provider_builder {
+        ffi_panic_boundary! {
+            to_boxed_mut_ptr(Some(CryptoProviderBuilder::new_with_aws_lc_rs()))
         }
     }
 
@@ -68,13 +85,47 @@ impl CryptoProviderBuilder {
         }
     }
 
+    pub(crate) fn new() -> CryptoProviderBuilder {
+        CryptoProviderBuilder {
+            default_provider: Self::default_provider(),
+            ciphersuites: Vec::new(),
+        }
+    }
+
     #[cfg(feature = "ring")]
-    pub(crate) fn default_provider() -> rustls::crypto::CryptoProvider {
+    pub(crate) fn new_with_ring() -> CryptoProviderBuilder {
+        CryptoProviderBuilder {
+            default_provider: rustls::crypto::ring::default_provider(),
+            ciphersuites: Vec::new(),
+        }
+    }
+
+    #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
+    pub(crate) fn new_with_aws_lc_rs() -> CryptoProviderBuilder {
+        CryptoProviderBuilder {
+            default_provider: rustls::crypto::aws_lc_rs::default_provider(),
+            ciphersuites: Vec::new(),
+        }
+    }
+
+    pub(crate) fn build(self) -> CryptoProvider {
+        let provider = Arc::new(rustls::crypto::CryptoProvider {
+            ..self.default_provider
+        });
+        let ciphersuites = rustls_crypto_provider::provider_cipher_suites(&provider);
+        CryptoProvider {
+            provider,
+            ciphersuites,
+        }
+    }
+
+    #[cfg(feature = "ring")]
+    fn default_provider() -> rustls::crypto::CryptoProvider {
         rustls::crypto::ring::default_provider()
     }
 
     #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
-    pub(crate) fn default_provider() -> rustls::crypto::CryptoProvider {
+    fn default_provider() -> rustls::crypto::CryptoProvider {
         rustls::crypto::aws_lc_rs::default_provider()
     }
 }
@@ -105,32 +156,6 @@ impl rustls_crypto_provider {
             .iter()
             .map(|cs| cs as *const SupportedCipherSuite as *const _)
             .collect::<Vec<_>>()
-    }
-
-    #[cfg(feature = "ring")]
-    #[no_mangle]
-    pub extern "C" fn rustls_crypto_provider_ring_new() -> *const rustls_crypto_provider {
-        ffi_panic_boundary! {
-            let provider = Arc::new(rustls::crypto::ring::default_provider());
-            let ciphersuites = Self::provider_cipher_suites(&provider);
-            to_arc_const_ptr(CryptoProvider {
-                provider,
-                ciphersuites,
-            })
-        }
-    }
-
-    #[cfg(feature = "aws_lc_rs")]
-    #[no_mangle]
-    pub extern "C" fn rustls_crypto_provider_aws_lc_rs_new() -> *const rustls_crypto_provider {
-        ffi_panic_boundary! {
-            let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
-            let ciphersuites = Self::provider_cipher_suites(&provider);
-            to_arc_const_ptr(CryptoProvider {
-                provider,
-                ciphersuites,
-            })
-        }
     }
 
     #[no_mangle]
@@ -170,22 +195,6 @@ impl rustls_crypto_provider {
     }
 }
 
-#[cfg(feature = "ring")]
 pub(crate) fn default_provider() -> CryptoProvider {
-    let provider = rustls::crypto::ring::default_provider();
-    let ciphersuites = rustls_crypto_provider::provider_cipher_suites(&provider);
-    CryptoProvider {
-        provider: provider.into(),
-        ciphersuites,
-    }
-}
-
-#[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
-pub(crate) fn default_provider() -> CryptoProvider {
-    let provider = rustls::crypto::aws_lc_rs::default_provider();
-    let ciphersuites = rustls_crypto_provider::provider_cipher_suites(&provider);
-    CryptoProvider {
-        provider,
-        ciphersuites,
-    }
+    CryptoProviderBuilder::new().build()
 }
