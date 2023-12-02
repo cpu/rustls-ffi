@@ -8,7 +8,6 @@ use libc::{c_char, size_t};
 use pki_types::{CertificateDer, UnixTime};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::ResolvesClientCert;
-use rustls::crypto::ring::ALL_CIPHER_SUITES;
 use rustls::{
     sign::CertifiedKey, CertificateError, ClientConfig, ClientConnection, DigitallySignedStruct,
     Error, ProtocolVersion, SignatureScheme, SupportedCipherSuite, WantsVerifier,
@@ -199,7 +198,7 @@ impl rustls_client_config_builder {
             let mut cs_vec: Vec<SupportedCipherSuite> = Vec::new();
             for &cs in cipher_suites.iter() {
                 let cs = try_ref_from_ptr!(cs);
-                match ALL_CIPHER_SUITES.iter().find(|&acs| cs.eq(acs)) {
+                match provider.provider.cipher_suites.iter().find(|acs| cs.eq(acs)) {
                     Some(scs) => cs_vec.push(*scs),
                     None => return InvalidParameter,
                 }

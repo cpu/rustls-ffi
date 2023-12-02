@@ -6,7 +6,6 @@ use std::slice;
 use std::sync::Arc;
 
 use libc::size_t;
-use rustls::crypto::ring::ALL_CIPHER_SUITES;
 use rustls::server::danger::ClientCertVerifier;
 use rustls::server::{
     ClientHello, ResolvesServerCert, ServerConfig, ServerConnection, StoresServerSessions,
@@ -150,7 +149,7 @@ impl rustls_server_config_builder {
             let mut cs_vec: Vec<SupportedCipherSuite> = Vec::new();
             for &cs in cipher_suites.iter() {
                 let cs = try_ref_from_ptr!(cs);
-                match ALL_CIPHER_SUITES.iter().find(|&acs| cs.eq(acs)) {
+                match provider.provider.cipher_suites.iter().find(|acs| cs.eq(acs)) {
                     Some(scs) => cs_vec.push(*scs),
                     None => return InvalidParameter,
                 }
