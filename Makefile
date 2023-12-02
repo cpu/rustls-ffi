@@ -28,7 +28,7 @@ endif
 
 ifeq ($(CRYPTO_PROVIDER), aws_lc_rs)
 	CFLAGS += -D DEFINE_AWS_LC_RS
-	CARGOFLAGS += --features aws_lc_rs
+	CARGOFLAGS += --no-default-features --features aws_lc_rs
 else ifeq ($(CRYPTO_PROVIDER), all)
 	CFLAGS += -D DEFINE_RING -D DEFINE_AWS_LC_RS
 	CARGOFLAGS += --features ring,aws_lc_rs
