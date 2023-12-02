@@ -411,16 +411,14 @@ main(int argc, const char **argv)
   /* Set this global variable for logging purposes. */
   programname = "client";
 
+  struct rustls_crypto_provider_builder *crypto_provider_builder = NULL;
+  const struct rustls_crypto_provider *crypto_provider = NULL;
 #if defined(DEFINE_AWS_LC_RS)
-  const struct rustls_crypto_provider *crypto_provider =
-    rustls_crypto_provider_aws_lc_rs_new();
+  crypto_provider_builder = rustls_crypto_provider_builder_aws_lc_rs();
 #else
-  const struct rustls_crypto_provider *crypto_provider =
-    rustls_crypto_provider_ring_new();
+  crypto_provider_builder = rustls_crypto_provider_builder_ring();
 #endif
 
-  struct rustls_client_config_builder *config_builder =
-    rustls_client_config_builder_new_with_provider(crypto_provider);
   struct rustls_root_cert_store_builder *server_cert_root_store_builder = NULL;
   const struct rustls_root_cert_store *server_cert_root_store = NULL;
   const struct rustls_client_config *client_config = NULL;
@@ -429,6 +427,16 @@ main(int argc, const char **argv)
   struct rustls_server_cert_verifier *server_cert_verifier = NULL;
   struct rustls_slice_bytes alpn_http11;
   const struct rustls_certified_key *certified_key = NULL;
+
+  result = rustls_crypto_provider_builder_build(crypto_provider_builder,
+                                                &crypto_provider);
+  if(result != RUSTLS_RESULT_OK) {
+    print_error("building crypto provider", result);
+    goto cleanup;
+  }
+
+  struct rustls_client_config_builder *config_builder =
+    rustls_client_config_builder_new_with_provider(crypto_provider);
 
   alpn_http11.data = (unsigned char *)"http/1.1";
   alpn_http11.len = 8;
@@ -522,6 +530,7 @@ main(int argc, const char **argv)
   ret = 0;
 
 cleanup:
+  rustls_crypto_provider_builder_free(crypto_provider_builder);
   rustls_crypto_provider_free(crypto_provider);
   rustls_root_cert_store_builder_free(server_cert_root_store_builder);
   rustls_root_cert_store_free(server_cert_root_store);
