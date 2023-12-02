@@ -349,7 +349,7 @@ dependencies = [
 [[package]]
 name = "rustls"
 version = "0.22.0"
-source = "git+https://github.com/rustls/rustls?rev=258c79edb056b5613333c6c6a516cae1b7a7fc36#258c79edb056b5613333c6c6a516cae1b7a7fc36"
+source = "git+https://github.com/rustls/rustls?rev=4d1b762b5328a1714862ba73ec72d5522fe0c049#4d1b762b5328a1714862ba73ec72d5522fe0c049"
 dependencies = [
  "aws-lc-rs",
  "ring",
