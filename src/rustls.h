@@ -1636,6 +1636,10 @@ struct rustls_crypto_provider_builder *rustls_crypto_provider_builder_new(void);
 struct rustls_crypto_provider_builder *rustls_crypto_provider_builder_ring(void);
 #endif
 
+#if defined(DEFINE_AWS_LC_RS)
+struct rustls_crypto_provider_builder *rustls_crypto_provider_builder_aws_lc_rs(void);
+#endif
+
 /**
  * Specify cipher suites in preference
  * order; the `cipher_suites` parameter must point to an array containing

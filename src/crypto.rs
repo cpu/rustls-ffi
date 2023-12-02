@@ -45,7 +45,7 @@ impl CryptoProviderBuilder {
     }
 
     #[no_mangle]
-    #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
+    #[cfg(feature = "aws_lc_rs")]
     pub extern "C" fn rustls_crypto_provider_builder_aws_lc_rs(
     ) -> *mut rustls_crypto_provider_builder {
         ffi_panic_boundary! {
@@ -112,7 +112,7 @@ impl CryptoProviderBuilder {
         }
     }
 
-    #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
+    #[cfg(feature = "aws_lc_rs")]
     pub(crate) fn new_with_aws_lc_rs() -> CryptoProviderBuilder {
         CryptoProviderBuilder {
             default_provider: rustls::crypto::aws_lc_rs::default_provider(),
