@@ -181,7 +181,7 @@ impl rustls_acceptor {
             }
             match acceptor.accept() {
                 Ok(None) => rustls_result::AcceptorNotReady,
-                Err(e) => map_error(e),
+                Err((e, _)) => map_error(e), // TODO(@cpu): Handle AcceptedAlert.
                 Ok(Some(accepted)) => {
                     set_boxed_mut_ptr(out_accepted, Some(accepted));
                     rustls_result::Ok
@@ -266,7 +266,7 @@ impl rustls_accepted {
             let hello = accepted.client_hello();
             let signature_schemes = hello.signature_schemes();
             match signature_schemes.get(i) {
-                Some(s) => s.get_u16(),
+                Some(s) => u16::from(*s),
                 None => 0,
             }
         }
@@ -304,7 +304,7 @@ impl rustls_accepted {
             let hello = accepted.client_hello();
             let cipher_suites = hello.cipher_suites();
             match cipher_suites.get(i) {
-                Some(cs) => cs.get_u16(),
+                Some(cs) => u16::from(*cs),
                 None => 0,
             }
         }
@@ -406,7 +406,7 @@ impl rustls_accepted {
                     set_boxed_mut_ptr(out_conn, wrapped);
                     rustls_result::Ok
                 }
-                Err(e) => map_error(e),
+                Err((e, _)) => map_error(e), // TODO(@cpu): Handle AcceptedAlert.
             }
         }
     }

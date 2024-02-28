@@ -23,9 +23,9 @@ read_buf = ["rustls/read_buf"]
 
 [dependencies]
 # Keep in sync with RUSTLS_CRATE_VERSION in build.rs
-rustls = { version = "0.22", features = [ "ring" ]}
+rustls = { version = "0.23.0-alpha.0", default-features = false, features = [ "ring", "std", "tls12" ]}
 pki-types = { package = "rustls-pki-types", version = "1", features = ["std"] }
-webpki = { package = "rustls-webpki", version = "0.102.0", features = ["std"] }
+webpki = { package = "rustls-webpki", version = "0.102.0", default-features = false, features = [ "ring", "std" ] }
 libc = "0.2"
 rustls-pemfile = "2"
 log = "0.4.17"
@@ -36,3 +36,7 @@ crate-type = ["lib", "staticlib"]
 
 [dev-dependencies]
 regex = "1.9.6"
+
+[patch."crates-io"]
+rustls = { git = "https://github.com/rustls/rustls", rev = "425b5272901d60a4e3d18d4f17d5d7291c331272" }
+
