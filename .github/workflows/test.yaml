@@ -64,6 +64,8 @@ jobs:
           persist-credentials: false
       - name: Setup PATH for CL.EXE
         uses: ilammy/msvc-dev-cmd@v1
+      - name: Install NASM for aws-lc-rs
+        uses: ilammy/setup-nasm@v1
       # Remove link.exe from non-MSVC packages that interferes with MSVC link
       - run: rm "C:\Program Files\Git\usr\bin\link.exe"
       - run: rm "C:\msys64\usr\bin\link.exe"
@@ -78,6 +80,8 @@ jobs:
           persist-credentials: false
       - name: Install nightly rust toolchain
         uses: dtolnay/rust-toolchain@nightly
+      - name: Install NASM for aws-lc-rs
+        uses: ilammy/setup-nasm@v1
       - name: Configure CMake
         run: cmake -S . -B build
       - name: Build, debug configuration
@@ -97,6 +101,8 @@ jobs:
           persist-credentials: false
       - name: Install nightly rust toolchain
         uses: dtolnay/rust-toolchain@nightly
+      - name: Install NASM for aws-lc-rs
+        uses: ilammy/setup-nasm@v1
       - name: Configure CMake
         run: cmake -S . -B build
       - name: Build, release configuration
