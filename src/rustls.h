@@ -873,7 +873,7 @@ void rustls_accepted_free(struct rustls_accepted *accepted);
  * equal to that of the rustls_accepted_alert, and must not be used after the rustls_accepted_alert
  * has been freed with rustls_accepted_alert_free.
  */
-struct rustls_slice_bytes rustls_accepted_alert_bytes(const struct rustls_accepted_alert *accepted_alert);
+struct rustls_slice_bytes rustls_accepted_alert_bytes(struct rustls_accepted_alert *accepted_alert);
 
 /**
  * Free a rustls_accepted_alert.
