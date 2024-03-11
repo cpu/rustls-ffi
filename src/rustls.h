@@ -141,6 +141,11 @@ typedef enum rustls_tls_version {
 typedef struct rustls_accepted rustls_accepted;
 
 /**
+ * Represents a TLS alert resulting from accepting a client.
+ */
+typedef struct rustls_accepted_alert rustls_accepted_alert;
+
+/**
  * A buffer and parser for ClientHello bytes. This allows reading ClientHello
  * before choosing a rustls_server_config. It's useful when the server
  * config will be based on parameters in the ClientHello: server name
@@ -662,7 +667,15 @@ rustls_io_result rustls_acceptor_read_tls(struct rustls_acceptor *acceptor,
  * out_accepted: An output parameter. The pointed-to pointer will be set
  *   to a new rustls_accepted only when the function returns
  *   RUSTLS_RESULT_OK. The memory is owned by the caller and must eventually
- *   be freed.
+ *   be freed
+ * out_alert: An output parameter. The pointed-to pointer will be set
+ *   to a new rustls_accepted_alert only when the function returns
+ *   a non-OK result. The memory is owned by the caller and must eventually
+ *   be freed with rustls_accepted_alert_free. The caller should call
+ *   rustls_accepted_alert_bytes to get the alert bytes, writing them to
+ *   the TLS connection before freeing the rustls_accepted_alert.
+ *
+ * Only one of out_accepted or out_alert will be set.
  *
  * Returns:
  *
@@ -685,7 +698,8 @@ rustls_io_result rustls_acceptor_read_tls(struct rustls_acceptor *acceptor,
  * from a protocol perspective.
  */
 rustls_result rustls_acceptor_accept(struct rustls_acceptor *acceptor,
-                                     struct rustls_accepted **out_accepted);
+                                     struct rustls_accepted **out_accepted,
+                                     struct rustls_accepted_alert **out_alert);
 
 /**
  * Get the server name indication (SNI) from the ClientHello.
@@ -795,6 +809,14 @@ struct rustls_slice_bytes rustls_accepted_alpn(const struct rustls_accepted *acc
  * out_conn: An output parameter. The pointed-to pointer will be set
  *   to a new rustls_connection only when the function returns
  *   RUSTLS_RESULT_OK.
+ * out_alert: An output parameter. The pointed-to pointer will be set
+ *   to a new rustls_accepted_alert only when the function returns
+ *   a non-OK result. The memory is owned by the caller and must eventually
+ *   be freed with rustls_accepted_alert_free. The caller should call
+ *   rustls_accepted_alert_bytes to get the alert bytes, writing them to
+ *   the TLS connection before freeing the rustls_accepted_alert.
+ *
+ * Only one of out_conn or out_alert will be set.
  *
  * Returns:
  *
@@ -823,7 +845,8 @@ struct rustls_slice_bytes rustls_accepted_alpn(const struct rustls_accepted *acc
  */
 rustls_result rustls_accepted_into_connection(struct rustls_accepted *accepted,
                                               const struct rustls_server_config *config,
-                                              struct rustls_connection **out_conn);
+                                              struct rustls_connection **out_conn,
+                                              struct rustls_accepted_alert **out_alert);
 
 /**
  * Free a rustls_accepted.
@@ -835,6 +858,33 @@ rustls_result rustls_accepted_into_connection(struct rustls_accepted *accepted,
  * Calling with NULL is fine. Must not be called twice with the same value.
  */
 void rustls_accepted_free(struct rustls_accepted *accepted);
+
+/**
+ * Return the to-be-written alert bytes from the rustls_accepted_alert.
+ *
+ * Parameters:
+ *
+ * accepted_alert: The rustls_accepted_alert to access. Must not be NULL, or previously
+ * freed.
+ *
+ * Returns:
+ *
+ * A rustls_slice_bytes containing the alert bytes. The returned bytes will have a lifetime
+ * equal to that of the rustls_accepted_alert, and must not be used after the rustls_accepted_alert
+ * has been freed with rustls_accepted_alert_free.
+ */
+struct rustls_slice_bytes rustls_accepted_alert_bytes(const struct rustls_accepted_alert *accepted_alert);
+
+/**
+ * Free a rustls_accepted_alert.
+ *
+ * Parameters:
+ *
+ * accepted_alert: The rustls_accepted_alert to free.
+ *
+ * Calling with NULL is fine. Must not be called twice with the same value.
+ */
+void rustls_accepted_alert_free(struct rustls_accepted_alert *accepted_alert);
 
 /**
  * Get the DER data of the certificate itself.
