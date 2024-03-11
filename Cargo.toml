@@ -50,6 +50,3 @@ rustflags = "-Cmetadata=rustls-ffi"
 [package.metadata.capi.pkg_config]
 name = "rustls"
 filename = "rustls"
-
-[patch."crates-io"]
-rustls = { git = "https://github.com/rustls/rustls", rev = "52efdc99c9eeabf2cc42cc3ee765b4ca395cb1ee" }
