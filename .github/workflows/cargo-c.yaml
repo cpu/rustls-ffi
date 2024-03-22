@@ -38,11 +38,7 @@ jobs:
           toolchain: nightly${{ matrix.toolchain-suffix }}
 
       - name: Install cargo-c
-        env:
-          LINK: https://github.com/lu-zero/cargo-c/releases/latest/download
-          CARGO_C_FILE: cargo-c-x86_64-unknown-linux-musl.tar.gz
-        run: |
-          curl -L $LINK/$CARGO_C_FILE | tar xz -C ~/.cargo/bin
+        run: cargo install cargo-c
 
       - run: cargo cbuild --verbose --release
       - run: cargo ctest --verbose --release
