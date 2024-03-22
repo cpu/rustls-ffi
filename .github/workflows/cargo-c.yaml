@@ -35,7 +35,7 @@ jobs:
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: stable${{ matrix.toolchain-suffix }}
+          toolchain: nightly{{ matrix.toolchain-suffix }}
 
       - name: Install cargo-c
         env:
