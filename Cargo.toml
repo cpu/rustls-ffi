@@ -10,7 +10,7 @@ repository = "https://github.com/rustls/rustls-ffi"
 categories = ["network-programming", "cryptography"]
 edition = "2021"
 links = "rustls_ffi"
-rust-version = "1.61"
+rust-version = "1.61.0"
 
 [features]
 # Enable this feature when building as Rust dependency. It inhibits the
@@ -41,6 +41,7 @@ regex = "1.9.6"
 [package.metadata.capi.header]
 name = "rustls"
 subdirectory = false
+generation = false
 
 [package.metadata.capi.library]
 name = "rustls"
@@ -50,3 +51,6 @@ rustflags = "-Cmetadata=rustls-ffi"
 [package.metadata.capi.pkg_config]
 name = "rustls"
 filename = "rustls"
+
+[package.metadata.capi.install]
+asset = [{from = "src/rustls.h", to = "include" }]
