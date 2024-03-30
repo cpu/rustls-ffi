@@ -339,6 +339,10 @@ impl OwnershipMarker for OwnershipRef {}
 /// preserving const-ness, and casting between the correct types. Implementing this is required in
 /// order to use `try_ref_from_ptr!` or `try_mut_from_ptr!` and several other helpful cast-related
 /// conversion helpers.
+///
+/// You can define a new `Castable` type using the `box_castable!`, `arc_castable!` or
+/// `ref_castable!` macros depending on the ownership marker you desire. See each macro's
+/// documentation for more information.
 pub(crate) trait Castable {
     /// Indicates whether to use `Box` or `Arc` when giving a pointer to C code for the underlying
     /// `RustType`.
@@ -347,6 +351,92 @@ pub(crate) trait Castable {
     /// The underlying Rust type that we are casting to and from.
     type RustType;
 }
+
+/// Defines a new [`Castable`] opaque struct with [`OwnershipBox`] ownership.
+///
+/// Expects to be invoked with a visibility specifier, the struct keyword, a struct name, and
+/// in parens, the Rust type that the opaque struct wraps. Similar to defining a normal struct
+/// that wraps a single type as its `.0` member.
+macro_rules! box_castable {
+    (
+        $(#[$comment:meta])*
+        $enum_vis:vis struct $name:ident($rust_type:ty);
+    ) => {
+        crate::castable!(OwnershipBox $(#[$comment])* $enum_vis $name $rust_type);
+    };
+}
+
+pub(crate) use box_castable;
+
+/// Defines a new [`Castable`] opaque struct with [`OwnershipArc`] ownership.
+///
+/// Expects to be invoked with a visibility specifier, the struct keyword, a struct name, and
+/// in parens, the Rust type that the opaque struct wraps. Similar to defining a normal struct
+/// that wraps a single type as its `.0` member.
+macro_rules! arc_castable {
+    (
+        $(#[$comment:meta])*
+        $enum_vis:vis struct $name:ident($rust_type:ty);
+    ) => {
+        crate::castable!(OwnershipArc $(#[$comment])* $enum_vis $name $rust_type);
+    };
+}
+
+pub(crate) use arc_castable;
+
+/// Defines a new [`Castable`] opaque struct with [`OwnershipArc`] ownership.
+///
+/// Expects to be invoked with a visibility specifier, the struct keyword, a struct name, and
+/// in parens, the Rust type that the opaque struct wraps (optionally with a lifetime specifier).
+/// Similar to defining a normal struct that wraps a single type as its `.0` member.
+///
+/// If a lifetime is specified, the opaque struct will be parameterized by that lifetime
+/// and a `PhantomData` field referencing the lifetime is added to the struct.
+macro_rules! ref_castable {
+    (
+        $(#[$comment:meta])*
+        $enum_vis:vis struct $name:ident ($rust_type:ident $(<$lt:tt>)?);
+    ) => {
+        $(#[$comment])*
+        $enum_vis struct $name $(<$lt>)? {
+            _private: [u8; 0],
+            $( _marker: PhantomData<&$lt ()>, )?
+        }
+
+        impl $(<$lt>)? crate::Castable for $name $(<$lt>)? {
+            type Ownership = crate::OwnershipRef;
+            type RustType = $rust_type $(<$lt>)?;
+        }
+    };
+}
+
+pub(crate) use ref_castable;
+
+/// Defines a new [`Castable`] opaque struct with the specified ownership.
+///
+/// In general you should prefer using `box_castable!`, `arc_castable!`, or `ref_castable!`
+/// instead of this macro.
+macro_rules! castable {
+    (
+        $ownership:ident
+        $(#[$comment:meta])*
+        $enum_vis:vis
+        $name:ident
+        $rust_type:ty
+    ) => {
+        $(#[$comment])*
+        $enum_vis struct $name {
+            _private: [u8; 0],
+        }
+
+        impl crate::Castable for $name {
+            type Ownership = crate::$ownership;
+            type RustType = $rust_type;
+        }
+    };
+}
+
+pub(crate) use castable;
 
 /// Convert a const pointer to a [`Castable`] to a const pointer to its underlying
 /// [`Castable::RustType`].
