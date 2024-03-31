@@ -1,9 +1,9 @@
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Write;
 use std::{env, fs, path::PathBuf};
 
-// Keep in sync with Cargo.toml.
-const RUSTLS_CRATE_VERSION: &str = "0.23.4";
+use serde::Deserialize;
 
 fn main() {
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").unwrap());
@@ -20,9 +20,31 @@ fn main() {
     writeln!(
         &mut f,
         r#"const RUSTLS_FFI_VERSION: &str = "rustls-ffi/{}/rustls/{}";"#,
-        pkg_version, RUSTLS_CRATE_VERSION
+        pkg_version,
+        rustls_crate_version()
     )
     .expect("Could not write file");
 
     println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
+}
+
+fn rustls_crate_version() -> String {
+    #[derive(Deserialize)]
+    struct CargoToml {
+        dependencies: HashMap<String, DependencyValue>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum DependencyValue {
+        String(String),
+        Object { version: String },
+    }
+
+    let cargo_toml: CargoToml = toml::from_str(include_str!("Cargo.toml")).unwrap();
+    match &cargo_toml.dependencies["rustls"] {
+        DependencyValue::String(version) => version,
+        DependencyValue::Object { version, .. } => version,
+    }
+    .clone()
 }
