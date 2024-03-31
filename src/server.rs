@@ -27,8 +27,8 @@ use crate::session::{
 };
 use crate::{
     ffi_panic_boundary, free_arc, free_box, set_boxed_mut_ptr, to_arc_const_ptr, to_boxed_mut_ptr,
-    try_box_from_ptr, try_clone_arc, try_mut_from_ptr, try_ref_from_ptr, try_slice, userdata_get,
-    Castable, OwnershipArc, OwnershipBox, OwnershipRef,
+    try_box_from_ptr, try_clone_arc, try_from_mut, try_mut_from_ptr, try_ref_from_ptr, try_slice,
+    userdata_get, Castable, OwnershipArc, OwnershipBox, OwnershipRef,
 };
 
 /// A server config being constructed. A builder can be modified by,
@@ -631,24 +631,29 @@ impl rustls_server_config_builder {
     /// If `userdata` has been set with rustls_connection_set_userdata, it
     /// will be passed to the callbacks. Otherwise the userdata param passed to
     /// the callbacks will be NULL.
+    ///
+    /// If `builder`, `get_cb`, or `put_cb` are NULL this function will do nothing
+    /// and return.
     #[no_mangle]
     pub extern "C" fn rustls_server_config_builder_set_persistence(
         builder: *mut rustls_server_config_builder,
         get_cb: rustls_session_store_get_callback,
         put_cb: rustls_session_store_put_callback,
-    ) -> rustls_result {
+    ) {
         ffi_panic_boundary! {
             let get_cb: SessionStoreGetCallback = match get_cb {
                 Some(cb) => cb,
-                None => return rustls_result::NullParameter,
+                None => return,
             };
             let put_cb: SessionStorePutCallback = match put_cb {
                 Some(cb) => cb,
-                None => return rustls_result::NullParameter,
+                None => return,
             };
-            let builder: &mut ServerConfigBuilder = try_mut_from_ptr!(builder);
+            let builder = match try_from_mut(builder) {
+                Some(b) => b,
+                None => return,
+            };
             builder.session_storage = Some(Arc::new(SessionStoreBroker::new(get_cb, put_cb)));
-            rustls_result::Ok
         }
     }
 }

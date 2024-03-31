@@ -1844,9 +1844,12 @@ rustls_result rustls_client_hello_select_certified_key(const struct rustls_clien
  * If `userdata` has been set with rustls_connection_set_userdata, it
  * will be passed to the callbacks. Otherwise the userdata param passed to
  * the callbacks will be NULL.
+ *
+ * If `builder`, `get_cb`, or `put_cb` are NULL this function will do nothing
+ * and return.
  */
-rustls_result rustls_server_config_builder_set_persistence(struct rustls_server_config_builder *builder,
-                                                           rustls_session_store_get_callback get_cb,
-                                                           rustls_session_store_put_callback put_cb);
+void rustls_server_config_builder_set_persistence(struct rustls_server_config_builder *builder,
+                                                  rustls_session_store_get_callback get_cb,
+                                                  rustls_session_store_put_callback put_cb);
 
 #endif /* RUSTLS_H */
