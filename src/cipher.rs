@@ -1161,6 +1161,23 @@ impl Castable for rustls_server_cert_verifier {
 }
 
 impl rustls_server_cert_verifier {
+    /// Create a new server certificate verifier that uses the system's root store and WebPKI via
+    /// `rustls-platform-verifier`.
+    ///
+    /// The verifier can be used in several `rustls_client_config` instances and must be freed by
+    /// the application when no longer needed.
+    #[no_mangle]
+    pub extern "C" fn rustls_platform_server_cert_verifier(
+        verifier_out: *mut *mut rustls_server_cert_verifier,
+    ) -> rustls_result {
+        ffi_panic_boundary! {
+            let verifier_out = try_mut_from_ptr_ptr!(verifier_out);
+            let verifier = Arc::new(rustls_platform_verifier::Verifier::new());
+            set_boxed_mut_ptr(verifier_out, verifier);
+            rustls_result::Ok
+        }
+    }
+
     /// Free a `rustls_server_cert_verifier` previously returned from
     /// `rustls_server_cert_verifier_builder_build`. Calling with NULL is fine. Must not be
     /// called twice with the same value.
