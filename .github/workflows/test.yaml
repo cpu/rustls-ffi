@@ -87,7 +87,7 @@ jobs:
       - name: Build, release configuration
         run: cmake --build build --config Release
       - name: Integration test, release configuration
-        run: cargo test --locked --test client_server client_server_integration -- --ignored --exact
+        run: cargo test --locked -- --ignored
         env:
           CLIENT_BINARY: D:\a\rustls-ffi\rustls-ffi\build\tests\Release\client.exe
           SERVER_BINARY: D:\a\rustls-ffi\rustls-ffi\build\tests\Release\server.exe
