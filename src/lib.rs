@@ -355,14 +355,17 @@ pub(crate) trait Castable {
 /// Defines a new [`Castable`] opaque struct with [`OwnershipBox`] ownership.
 ///
 /// Expects to be invoked with a visibility specifier, the struct keyword, a struct name, and
-/// in parens, the Rust type that the opaque struct wraps. Similar to defining a normal struct
-/// that wraps a single type as its `.0` member.
+/// in parens, the Rust type pointed to by raw pointers of the opaque struct's type.
+/// Similar to a [newtype] with `#[repr(transparent)]`, but only allows conversions
+/// between `Box` and raw pointers.
+///
+/// [newtype]: https://doc.rust-lang.org/book/ch19-04-advanced-types.html#using-the-newtype-pattern-for-type-safety-and-abstraction
 macro_rules! box_castable {
     (
         $(#[$comment:meta])*
-        $enum_vis:vis struct $name:ident($rust_type:ty);
+        pub struct $name:ident($rust_type:ty);
     ) => {
-        crate::castable!(OwnershipBox $(#[$comment])* $enum_vis $name $rust_type);
+        crate::castable!(OwnershipBox $(#[$comment])* $name $rust_type);
     };
 }
 
@@ -371,34 +374,40 @@ pub(crate) use box_castable;
 /// Defines a new [`Castable`] opaque struct with [`OwnershipArc`] ownership.
 ///
 /// Expects to be invoked with a visibility specifier, the struct keyword, a struct name, and
-/// in parens, the Rust type that the opaque struct wraps. Similar to defining a normal struct
-/// that wraps a single type as its `.0` member.
+/// in parens, the Rust type pointed to by raw pointers of the opaque struct's type.
+/// Similar to a [newtype] with `#[repr(transparent)]`, but only allows conversions
+/// between `Arc` and raw pointers.
+///
+/// [newtype]: https://doc.rust-lang.org/book/ch19-04-advanced-types.html#using-the-newtype-pattern-for-type-safety-and-abstraction
 macro_rules! arc_castable {
     (
         $(#[$comment:meta])*
-        $enum_vis:vis struct $name:ident($rust_type:ty);
+        pub struct $name:ident($rust_type:ty);
     ) => {
-        crate::castable!(OwnershipArc $(#[$comment])* $enum_vis $name $rust_type);
+        crate::castable!(OwnershipArc $(#[$comment])* $name $rust_type);
     };
 }
 
 pub(crate) use arc_castable;
 
-/// Defines a new [`Castable`] opaque struct with [`OwnershipArc`] ownership.
+/// Defines a new [`Castable`] opaque struct with [`OwnershipRef`] ownership.
 ///
 /// Expects to be invoked with a visibility specifier, the struct keyword, a struct name, and
-/// in parens, the Rust type that the opaque struct wraps (optionally with a lifetime specifier).
-/// Similar to defining a normal struct that wraps a single type as its `.0` member.
+/// in parens, the Rust type pointed to by raw pointers of the opaque struct's type.
+/// Similar to a [newtype] with `#[repr(transparent)]`, but only allows conversions
+/// between a reference and raw pointers.
 ///
-/// If a lifetime is specified, the opaque struct will be parameterized by that lifetime
+/// If a lifetime parameter is specified, the opaque struct will be parameterized by it,
 /// and a `PhantomData` field referencing the lifetime is added to the struct.
+///
+/// [newtype]: https://doc.rust-lang.org/book/ch19-04-advanced-types.html#using-the-newtype-pattern-for-type-safety-and-abstraction
 macro_rules! ref_castable {
     (
         $(#[$comment:meta])*
-        $enum_vis:vis struct $name:ident ($rust_type:ident $(<$lt:tt>)?);
+        pub struct $name:ident ($rust_type:ident $(<$lt:tt>)?);
     ) => {
         $(#[$comment])*
-        $enum_vis struct $name $(<$lt>)? {
+        pub struct $name $(<$lt>)? {
             _private: [u8; 0],
             $( _marker: PhantomData<&$lt ()>, )?
         }
@@ -420,12 +429,11 @@ macro_rules! castable {
     (
         $ownership:ident
         $(#[$comment:meta])*
-        $enum_vis:vis
         $name:ident
         $rust_type:ty
     ) => {
         $(#[$comment])*
-        $enum_vis struct $name {
+        pub struct $name {
             _private: [u8; 0],
         }
 

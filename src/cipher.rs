@@ -918,7 +918,7 @@ box_castable! {
     ///
     /// See <https://docs.rs/rustls/latest/rustls/client/struct.ServerCertVerifierBuilder.html>
     /// for more information.
-    pub(crate) struct rustls_web_pki_server_cert_verifier_builder(Option<ServerCertVerifierBuilder>);
+    pub struct rustls_web_pki_server_cert_verifier_builder(Option<ServerCertVerifierBuilder>);
 }
 
 pub(crate) struct ServerCertVerifierBuilder {
