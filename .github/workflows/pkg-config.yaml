@@ -64,11 +64,11 @@ jobs:
 
       - name: Verify client is dynamically linked (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
-        run: LD_LIBRARY_PATH=$PREFIX/lib ldd target/client | grep "rustls"
+        run: LD_LIBRARY_PATH=$PREFIX/lib/x86_64-linux-gnu ldd target/client | grep "rustls"
 
       - name: Verify server is dynamically linked (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
-        run: LD_LIBRARY_PATH=$PREFIX/lib ldd target/server | grep "rustls"
+        run: LD_LIBRARY_PATH=$PREFIX/lib/x86_64-linux-gnu ldd target/server | grep "rustls"
 
       - name: Verify client is dynamically linked (macOS)
         if: matrix.os == 'macos-latest'
@@ -79,4 +79,9 @@ jobs:
         run: LD_LIBRARY_PATH=$PREFIX/lib otool -L target/server | grep "rustls"
 
       - name: Run the integration tests
+        if: matrix.os == 'ubuntu-latest'
+        run: LD_LIBRARY_PATH=$PREFIX/lib/x86_64-linux-gnu make --file=Makefile.pkg-config PROFILE=debug integration
+
+      - name: Run the integration tests
+        if: matrix.os == 'macos-latest'
         run: LD_LIBRARY_PATH=$PREFIX/lib make --file=Makefile.pkg-config PROFILE=debug integration
