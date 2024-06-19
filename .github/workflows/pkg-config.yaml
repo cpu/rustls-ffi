@@ -56,6 +56,9 @@ jobs:
       - name: Install the library
         run: make --file=Makefile.pkg-config PREFIX=${PREFIX} install
 
+      - name: Show pkg-config file
+        run: cat ${PREFIX}/lib/pkgconfig/rustls.pc
+
       - name: Build the client/server examples
         run: PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig make --file=Makefile.pkg-config PROFILE=debug
 
