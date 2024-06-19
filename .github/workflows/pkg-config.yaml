@@ -56,6 +56,9 @@ jobs:
       - name: Install the library
         run: make --file=Makefile.pkg-config PREFIX=${PREFIX} install
 
+      - name: Show generated tree
+        run: find ${PREFIX}
+
       - name: Show pkg-config file
         run: cat ${PREFIX}/lib/pkgconfig/rustls.pc
 
