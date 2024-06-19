@@ -59,9 +59,6 @@ jobs:
       - name: Show generated tree
         run: find ${PREFIX}
 
-      - name: Show pkg-config file
-        run: cat ${PREFIX}/lib/pkgconfig/rustls.pc
-
       - name: Build the client/server examples
         run: PKG_CONFIG_PATH=$PREFIX/lib/x86_64-linux-gnu/pkgconfig make --file=Makefile.pkg-config PROFILE=debug
 
