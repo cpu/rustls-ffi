@@ -60,7 +60,12 @@ jobs:
         run: find ${PREFIX}
 
       - name: Build the client/server examples
+        if: matrix.os == 'ubuntu-latest'
         run: PKG_CONFIG_PATH=$PREFIX/lib/x86_64-linux-gnu/pkgconfig make --file=Makefile.pkg-config PROFILE=debug
+
+      - name: Build the client/server examples
+        if: matrix.os == 'macos-latest'
+        run: PKG_CONFIG_PATH=$PREFIX/lib/pkgconfig make --file=Makefile.pkg-config PROFILE=debug
 
       - name: Verify client is dynamically linked (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
