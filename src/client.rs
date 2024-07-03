@@ -7,16 +7,15 @@ use libc::{c_char, size_t};
 use pki_types::{CertificateDer, UnixTime};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::client::ResolvesClientCert;
-use rustls::crypto::ring::ALL_CIPHER_SUITES;
+use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
 use rustls::{
     sign::CertifiedKey, CertificateError, ClientConfig, ClientConnection, DigitallySignedStruct,
     Error, ProtocolVersion, SignatureScheme, WantsVerifier,
 };
 
-use crate::cipher::{
-    rustls_certified_key, rustls_server_cert_verifier, rustls_supported_ciphersuite,
-};
+use crate::cipher::{rustls_certified_key, rustls_server_cert_verifier};
 use crate::connection::{rustls_connection, Connection};
+use crate::crypto::rustls_crypto_provider;
 use crate::error::rustls_result::{InvalidParameter, NullParameter};
 use crate::error::{self, rustls_result};
 use crate::rslice::NulByte;
@@ -39,6 +38,7 @@ box_castable! {
 }
 
 pub(crate) struct ClientConfigBuilder {
+    provider: Arc<CryptoProvider>,
     base: rustls::ConfigBuilder<ClientConfig, WantsVerifier>,
     verifier: Arc<dyn ServerCertVerifier>,
     alpn_protocols: Vec<Vec<u8>>,
@@ -54,7 +54,7 @@ arc_castable! {
 }
 
 #[derive(Debug)]
-struct NoneVerifier;
+struct NoneVerifier(Arc<CryptoProvider>);
 
 impl ServerCertVerifier for NoneVerifier {
     fn verify_server_cert(
@@ -70,26 +70,34 @@ impl ServerCertVerifier for NoneVerifier {
 
     fn verify_tls12_signature(
         &self,
-        _message: &[u8],
-        _cert: &CertificateDer,
-        _dss: &DigitallySignedStruct,
+        message: &[u8],
+        cert: &CertificateDer,
+        dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        Err(Error::InvalidCertificate(CertificateError::BadSignature))
+        verify_tls12_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
     }
 
     fn verify_tls13_signature(
         &self,
-        _message: &[u8],
-        _cert: &CertificateDer,
-        _dss: &DigitallySignedStruct,
+        message: &[u8],
+        cert: &CertificateDer,
+        dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        Err(Error::InvalidCertificate(CertificateError::BadSignature))
+        verify_tls13_signature(
+            message,
+            cert,
+            dss,
+            &self.0.signature_verification_algorithms,
+        )
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        rustls::crypto::ring::default_provider()
-            .signature_verification_algorithms
-            .supported_schemes()
+        self.0.signature_verification_algorithms.supported_schemes()
     }
 }
 
@@ -102,19 +110,17 @@ impl rustls_client_config_builder {
     /// This starts out with no trusted roots.
     /// Caller must add roots with rustls_client_config_builder_load_roots_from_file
     /// or provide a custom verifier.
+    // TODO(XXX): describe use of default crypto provider.
     #[no_mangle]
     pub extern "C" fn rustls_client_config_builder_new() -> *mut rustls_client_config_builder {
         ffi_panic_boundary! {
-            // Unwrap safety: *ring* default provider always has ciphersuites compatible with the
-            // default protocol versions.
-            let base = ClientConfig::builder_with_provider(
-                rustls::crypto::ring::default_provider().into(),
-            )
-            .with_safe_default_protocol_versions()
-            .unwrap();
+            let base = ClientConfig::builder();
+            // Safety: if there were no default set, ClientConfig::builder() would have panic'd.
+            let default_provider = CryptoProvider::get_default().unwrap();
             let builder = ClientConfigBuilder {
+                provider: default_provider.clone(),
                 base,
-                verifier: Arc::new(NoneVerifier),
+                verifier: Arc::new(NoneVerifier(default_provider.clone())),
                 cert_resolver: None,
                 alpn_protocols: vec![],
                 enable_sni: true,
@@ -141,26 +147,13 @@ impl rustls_client_config_builder {
     /// ownership. `len` is the number of consecutive `uint16_t` pointed to by `versions`.
     #[no_mangle]
     pub extern "C" fn rustls_client_config_builder_new_custom(
-        cipher_suites: *const *const rustls_supported_ciphersuite,
-        cipher_suites_len: size_t,
+        provider: *const rustls_crypto_provider,
         tls_versions: *const u16,
         tls_versions_len: size_t,
         builder_out: *mut *mut rustls_client_config_builder,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            if builder_out.is_null() {
-                return NullParameter;
-            }
-            let cipher_suites = try_slice!(cipher_suites, cipher_suites_len);
-            let mut cs_vec = Vec::new();
-            for &cs in cipher_suites.iter() {
-                let cs = try_ref_from_ptr!(cs);
-                match ALL_CIPHER_SUITES.iter().find(|&acs| cs.eq(acs)) {
-                    Some(scs) => cs_vec.push(*scs),
-                    None => return InvalidParameter,
-                }
-            }
-
+            let provider = try_clone_arc!(provider);
             let tls_versions = try_slice!(tls_versions, tls_versions_len);
             let mut versions = vec![];
             for version_number in tls_versions {
@@ -174,19 +167,16 @@ impl rustls_client_config_builder {
 
             let builder_out = try_mut_from_ptr_ptr!(builder_out);
 
-            let provider = rustls::crypto::CryptoProvider {
-                cipher_suites: cs_vec,
-                ..rustls::crypto::ring::default_provider()
-            };
-            let result = ClientConfig::builder_with_provider(provider.into())
+            let result = ClientConfig::builder_with_provider(provider.clone())
                 .with_protocol_versions(&versions);
             let base = match result {
                 Ok(new) => new,
                 Err(_) => return InvalidParameter,
             };
             let config_builder = ClientConfigBuilder {
+                provider: provider.clone(),
                 base,
-                verifier: Arc::new(NoneVerifier),
+                verifier: Arc::new(NoneVerifier(provider)),
                 cert_resolver: None,
                 alpn_protocols: vec![],
                 enable_sni: true,
@@ -238,12 +228,14 @@ type VerifyCallback = unsafe extern "C" fn(
 
 // An implementation of rustls::ServerCertVerifier based on a C callback.
 struct Verifier {
+    provider: Arc<CryptoProvider>,
     callback: VerifyCallback,
 }
 
 /// Safety: Verifier is Send because we don't allocate or deallocate any of its
 /// fields.
 unsafe impl Send for Verifier {}
+
 /// Safety: Verifier is Sync if the C code that passes us a callback that
 /// obeys the concurrency safety requirements documented in
 /// rustls_client_config_builder_dangerous_set_certificate_verifier.
@@ -292,11 +284,11 @@ impl ServerCertVerifier for Verifier {
         cert: &CertificateDer,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        rustls::crypto::verify_tls12_signature(
+        verify_tls12_signature(
             message,
             cert,
             dss,
-            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+            &self.provider.signature_verification_algorithms,
         )
     }
 
@@ -306,16 +298,16 @@ impl ServerCertVerifier for Verifier {
         cert: &CertificateDer,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, Error> {
-        rustls::crypto::verify_tls13_signature(
+        verify_tls13_signature(
             message,
             cert,
             dss,
-            &rustls::crypto::ring::default_provider().signature_verification_algorithms,
+            &self.provider.signature_verification_algorithms,
         )
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        rustls::crypto::ring::default_provider()
+        self.provider
             .signature_verification_algorithms
             .supported_schemes()
     }
@@ -364,7 +356,10 @@ impl rustls_client_config_builder {
                 None => return InvalidParameter,
             };
 
-            let verifier = Verifier { callback };
+            let verifier = Verifier {
+                provider: config_builder.provider.clone(),
+                callback,
+            };
             config_builder.verifier = Arc::new(verifier);
             rustls_result::Ok
         }
@@ -643,7 +638,7 @@ mod tests {
 
         assert_eq!(
             rustls_connection::rustls_connection_get_negotiated_ciphersuite(conn),
-            null()
+            0,
         );
         assert_eq!(
             rustls_connection::rustls_connection_get_peer_certificate(conn, 0),

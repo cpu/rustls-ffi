@@ -355,12 +355,11 @@ read_file(const char *filename, char *buf, size_t buflen, size_t *n)
 }
 
 const struct rustls_certified_key *
-load_cert_and_key(const char *certfile, const char *keyfile)
+load_cert_and_key(const rustls_crypto_provider *provider, const char *certfile,
+                  const char *keyfile)
 {
   char certbuf[10000];
   size_t certbuf_len;
-  char keybuf[10000];
-  size_t keybuf_len;
 
   unsigned int result =
     read_file(certfile, certbuf, sizeof(certbuf), &certbuf_len);
@@ -368,20 +367,38 @@ load_cert_and_key(const char *certfile, const char *keyfile)
     return NULL;
   }
 
-  result = read_file(keyfile, keybuf, sizeof(keybuf), &keybuf_len);
+  rustls_signing_key *signing_key = NULL;
+  signing_key = load_signing_key(provider, keyfile);
+
+  const struct rustls_certified_key *certified_key;
+  result = rustls_certified_key_build(
+    (uint8_t *)certbuf, certbuf_len, signing_key, &certified_key);
+  if(result != RUSTLS_RESULT_OK) {
+    print_error("parsing certificate and key", result);
+    rustls_signing_key_free(signing_key);
+    return NULL;
+  }
+  return certified_key;
+}
+
+struct rustls_signing_key *
+load_signing_key(const rustls_crypto_provider *provider, const char *keyfile)
+{
+  char keybuf[10000];
+  size_t keybuf_len;
+
+  rustls_result result =
+    read_file(keyfile, keybuf, sizeof(keybuf), &keybuf_len);
   if(result != DEMO_OK) {
     return NULL;
   }
 
-  const struct rustls_certified_key *certified_key;
-  result = rustls_certified_key_build((uint8_t *)certbuf,
-                                      certbuf_len,
-                                      (uint8_t *)keybuf,
-                                      keybuf_len,
-                                      &certified_key);
+  struct rustls_signing_key *signing_key;
+  result = rustls_crypto_provider_load_key(
+    provider, (uint8_t *)keybuf, keybuf_len, &signing_key);
   if(result != RUSTLS_RESULT_OK) {
-    print_error("parsing certificate and key", result);
+    print_error("loading signing key", result);
     return NULL;
   }
-  return certified_key;
+  return signing_key;
 }

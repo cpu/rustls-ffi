@@ -10,21 +10,22 @@ use std::sync::Arc;
 use pki_types::{CertificateDer, CertificateRevocationListDer};
 use rustls::client::danger::ServerCertVerifier;
 use rustls::client::WebPkiServerVerifier;
-use rustls::crypto::ring::{ALL_CIPHER_SUITES, DEFAULT_CIPHER_SUITES};
+use rustls::crypto::CryptoProvider;
 use rustls::server::danger::ClientCertVerifier;
 use rustls::server::WebPkiClientVerifier;
-use rustls::sign::CertifiedKey;
+use rustls::sign::{CertifiedKey, SigningKey};
 use rustls::{DistinguishedName, RootCertStore, SupportedCipherSuite};
-use rustls_pemfile::{certs, crls, pkcs8_private_keys, rsa_private_keys};
+use rustls_pemfile::{certs, crls};
 use webpki::{RevocationCheckDepth, UnknownStatusPolicy};
 
+use crate::crypto::{rustls_crypto_provider, rustls_signing_key};
 use crate::error::{self, rustls_result};
 use crate::rslice::{rustls_slice_bytes, rustls_str};
 use crate::{
     arc_castable, box_castable, ffi_panic_boundary, free_arc, free_box, ref_castable,
-    set_arc_mut_ptr, set_boxed_mut_ptr, to_arc_const_ptr, to_boxed_mut_ptr, try_clone_arc,
-    try_mut_from_ptr, try_mut_from_ptr_ptr, try_ref_from_ptr, try_ref_from_ptr_ptr, try_slice,
-    try_take,
+    set_arc_mut_ptr, set_boxed_mut_ptr, to_arc_const_ptr, to_boxed_mut_ptr, try_box_from_ptr,
+    try_clone_arc, try_mut_from_ptr, try_mut_from_ptr_ptr, try_ref_from_ptr, try_ref_from_ptr_ptr,
+    try_slice, try_take,
 };
 use rustls_result::{AlreadyUsed, NullParameter};
 
@@ -97,106 +98,6 @@ pub extern "C" fn rustls_supported_ciphersuite_get_name(
     }
 }
 
-/// Return the length of rustls' list of supported cipher suites.
-#[no_mangle]
-pub extern "C" fn rustls_all_ciphersuites_len() -> usize {
-    ALL_CIPHER_SUITES.len()
-}
-
-/// Get a pointer to a member of rustls' list of supported cipher suites. This will return non-NULL
-/// for i < rustls_all_ciphersuites_len().
-/// The returned pointer is valid for the lifetime of the program and may be used directly when
-/// building a ClientConfig or ServerConfig.
-#[no_mangle]
-pub extern "C" fn rustls_all_ciphersuites_get_entry(
-    i: size_t,
-) -> *const rustls_supported_ciphersuite {
-    match ALL_CIPHER_SUITES.get(i) {
-        Some(cs) => cs as *const SupportedCipherSuite as *const _,
-        None => null(),
-    }
-}
-
-/// Return the length of rustls' list of default cipher suites.
-#[no_mangle]
-pub extern "C" fn rustls_default_ciphersuites_len() -> usize {
-    DEFAULT_CIPHER_SUITES.len()
-}
-
-/// Get a pointer to a member of rustls' list of supported cipher suites. This will return non-NULL
-/// for i < rustls_default_ciphersuites_len().
-/// The returned pointer is valid for the lifetime of the program and may be used directly when
-/// building a ClientConfig or ServerConfig.
-#[no_mangle]
-pub extern "C" fn rustls_default_ciphersuites_get_entry(
-    i: size_t,
-) -> *const rustls_supported_ciphersuite {
-    match DEFAULT_CIPHER_SUITES.get(i) {
-        Some(cs) => cs as *const SupportedCipherSuite as *const _,
-        None => null(),
-    }
-}
-
-/// Rustls' list of supported cipher suites. This is an array of pointers, and
-/// its length is given by `RUSTLS_ALL_CIPHER_SUITES_LEN`. The pointers will
-/// always be valid. The contents and order of this array may change between
-/// releases.
-#[no_mangle]
-pub static mut RUSTLS_ALL_CIPHER_SUITES: [*const rustls_supported_ciphersuite; 9] = [
-    &rustls::crypto::ring::cipher_suite::TLS13_AES_256_GCM_SHA384 as *const SupportedCipherSuite
-        as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS13_AES_128_GCM_SHA256 as *const SupportedCipherSuite
-        as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256
-        as *const SupportedCipherSuite as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
-        as *const SupportedCipherSuite as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
-        as *const SupportedCipherSuite as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
-        as *const SupportedCipherSuite as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-        as *const SupportedCipherSuite as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
-        as *const SupportedCipherSuite as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
-        as *const SupportedCipherSuite as *const _,
-];
-
-/// The length of the array `RUSTLS_ALL_CIPHER_SUITES`.
-#[no_mangle]
-pub static RUSTLS_ALL_CIPHER_SUITES_LEN: usize = unsafe { RUSTLS_ALL_CIPHER_SUITES.len() };
-
-/// Rustls' list of default cipher suites. This is an array of pointers, and
-/// its length is given by `RUSTLS_DEFAULT_CIPHER_SUITES_LEN`. The pointers
-/// will always be valid. The contents and order of this array may change
-/// between releases.
-#[no_mangle]
-pub static mut RUSTLS_DEFAULT_CIPHER_SUITES: [*const rustls_supported_ciphersuite; 9] = [
-    &rustls::crypto::ring::cipher_suite::TLS13_AES_256_GCM_SHA384 as *const SupportedCipherSuite
-        as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS13_AES_128_GCM_SHA256 as *const SupportedCipherSuite
-        as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256
-        as *const SupportedCipherSuite as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
-        as *const SupportedCipherSuite as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
-        as *const SupportedCipherSuite as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
-        as *const SupportedCipherSuite as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-        as *const SupportedCipherSuite as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
-        as *const SupportedCipherSuite as *const _,
-    &rustls::crypto::ring::cipher_suite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
-        as *const SupportedCipherSuite as *const _,
-];
-
-/// The length of the array `RUSTLS_DEFAULT_CIPHER_SUITES`.
-#[no_mangle]
-pub static RUSTLS_DEFAULT_CIPHER_SUITES_LEN: usize = unsafe { RUSTLS_DEFAULT_CIPHER_SUITES.len() };
-
 arc_castable! {
     /// The complete chain of certificates to send during a TLS handshake,
     /// plus a private key that matches the end-entity (leaf) certificate.
@@ -232,30 +133,28 @@ impl rustls_certified_key {
     /// `rustls_server_config` in possession of the sole reference, so the
     /// `rustls_certified_key`'s memory will automatically be released when
     /// the `rustls_server_config` is freed.
+    // TODO(XXX): update RE: ownership of rustls_signing_key.
     #[no_mangle]
     pub extern "C" fn rustls_certified_key_build(
         cert_chain: *const u8,
         cert_chain_len: size_t,
-        private_key: *const u8,
-        private_key_len: size_t,
+        signing_key: *mut rustls_signing_key,
         certified_key_out: *mut *const rustls_certified_key,
     ) -> rustls_result {
         ffi_panic_boundary! {
+            let cert_chain = try_slice!(cert_chain, cert_chain_len);
+            let signing_key = try_box_from_ptr!(signing_key);
             let certified_key_out = unsafe {
                 match certified_key_out.as_mut() {
                     Some(c) => c,
                     None => return NullParameter,
                 }
             };
-            let certified_key = match rustls_certified_key::certified_key_build(
-                cert_chain,
-                cert_chain_len,
-                private_key,
-                private_key_len,
-            ) {
-                Ok(key) => Box::new(key),
-                Err(rr) => return rr,
-            };
+            let certified_key =
+                match rustls_certified_key::certified_key_build(cert_chain, *signing_key) {
+                    Ok(key) => Box::new(key),
+                    Err(rr) => return rr,
+                };
             let certified_key = Arc::into_raw(Arc::new(*certified_key)) as *const _;
             *certified_key_out = certified_key;
             rustls_result::Ok
@@ -326,39 +225,9 @@ impl rustls_certified_key {
     }
 
     fn certified_key_build(
-        cert_chain: *const u8,
-        cert_chain_len: size_t,
-        private_key: *const u8,
-        private_key_len: size_t,
+        mut cert_chain: &[u8],
+        signing_key: Arc<dyn SigningKey>,
     ) -> Result<CertifiedKey, rustls_result> {
-        let mut cert_chain = unsafe {
-            if cert_chain.is_null() {
-                return Err(NullParameter);
-            }
-            slice::from_raw_parts(cert_chain, cert_chain_len)
-        };
-        let private_key_der = unsafe {
-            if private_key.is_null() {
-                return Err(NullParameter);
-            }
-            slice::from_raw_parts(private_key, private_key_len)
-        };
-        let private_key = match pkcs8_private_keys(&mut Cursor::new(private_key_der)).next() {
-            Some(Ok(p)) => p.into(),
-            Some(Err(_)) => return Err(rustls_result::PrivateKeyParseError),
-            None => {
-                let rsa_private_key =
-                    match rsa_private_keys(&mut Cursor::new(private_key_der)).next() {
-                        Some(Ok(p)) => p.into(),
-                        _ => return Err(rustls_result::PrivateKeyParseError),
-                    };
-                rsa_private_key
-            }
-        };
-        let signing_key = match rustls::crypto::ring::sign::any_supported_type(&private_key) {
-            Ok(key) => key,
-            Err(_) => return Err(rustls_result::PrivateKeyParseError),
-        };
         let parsed_chain: Result<Vec<CertificateDer>, _> = certs(&mut cert_chain).collect();
         let parsed_chain = match parsed_chain {
             Ok(v) => v,
@@ -581,6 +450,7 @@ impl rustls_client_cert_verifier {
 }
 
 pub(crate) struct ClientCertVerifierBuilder {
+    provider: Option<Arc<CryptoProvider>>,
     roots: Arc<RootCertStore>,
     root_hint_subjects: Vec<DistinguishedName>,
     crls: Vec<CertificateRevocationListDer<'static>>,
@@ -630,7 +500,30 @@ impl rustls_web_pki_client_cert_verifier_builder {
     ) -> *mut rustls_web_pki_client_cert_verifier_builder {
         ffi_panic_boundary! {
             let store = try_clone_arc!(store);
+            let provider = CryptoProvider::get_default().cloned();
             let builder = ClientCertVerifierBuilder {
+                provider,
+                root_hint_subjects: store.subjects(),
+                roots: store,
+                crls: Vec::default(),
+                revocation_depth: RevocationCheckDepth::Chain,
+                revocation_policy: UnknownStatusPolicy::Deny,
+                allow_unauthenticated: false,
+            };
+            to_boxed_mut_ptr(Some(builder))
+        }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn rustls_web_pki_client_cert_verifier_builder_new_with_provider(
+        provider: *const rustls_crypto_provider,
+        store: *const rustls_root_cert_store,
+    ) -> *mut rustls_web_pki_client_cert_verifier_builder {
+        ffi_panic_boundary! {
+            let store = try_clone_arc!(store);
+            let provider = try_clone_arc!(provider);
+            let builder = ClientCertVerifierBuilder {
+                provider: Some(provider),
                 root_hint_subjects: store.subjects(),
                 roots: store,
                 crls: Vec::default(),
@@ -802,9 +695,14 @@ impl rustls_web_pki_client_cert_verifier_builder {
             let client_verifier_builder = try_take!(client_verifier_builder);
             let verifier_out = try_mut_from_ptr_ptr!(verifier_out);
 
+            let provider = match client_verifier_builder.provider {
+                Some(p) => p,
+                None => return rustls_result::NoDefaultCryptoProvider,
+            };
+
             let mut builder = WebPkiClientVerifier::builder_with_provider(
                 client_verifier_builder.roots,
-                rustls::crypto::ring::default_provider().into(),
+                provider,
             )
             .with_crls(client_verifier_builder.crls);
             match client_verifier_builder.revocation_depth {
@@ -863,6 +761,7 @@ box_castable! {
 }
 
 pub(crate) struct ServerCertVerifierBuilder {
+    provider: Option<Arc<CryptoProvider>>,
     roots: Arc<RootCertStore>,
     crls: Vec<CertificateRevocationListDer<'static>>,
     revocation_depth: RevocationCheckDepth,
@@ -896,6 +795,26 @@ impl ServerCertVerifierBuilder {
         ffi_panic_boundary! {
             let store = try_clone_arc!(store);
             let builder = ServerCertVerifierBuilder {
+                provider: CryptoProvider::get_default().cloned(),
+                roots: store,
+                crls: Vec::default(),
+                revocation_depth: RevocationCheckDepth::Chain,
+                revocation_policy: UnknownStatusPolicy::Deny,
+            };
+            to_boxed_mut_ptr(Some(builder))
+        }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn rustls_web_pki_server_cert_verifier_builder_new_with_provider(
+        provider: *const rustls_crypto_provider,
+        store: *const rustls_root_cert_store,
+    ) -> *mut rustls_web_pki_server_cert_verifier_builder {
+        ffi_panic_boundary! {
+            let store = try_clone_arc!(store);
+            let provider = try_clone_arc!(provider);
+            let builder = ServerCertVerifierBuilder {
+                provider: Some(provider),
                 roots: store,
                 crls: Vec::default(),
                 revocation_depth: RevocationCheckDepth::Chain,
@@ -1003,9 +922,14 @@ impl ServerCertVerifierBuilder {
             let server_verifier_builder = try_take!(server_verifier_builder);
             let verifier_out = try_mut_from_ptr_ptr!(verifier_out);
 
+            let provider = match server_verifier_builder.provider {
+                Some(provider) => provider,
+                None => return rustls_result::NoDefaultCryptoProvider,
+            };
+
             let mut builder = WebPkiServerVerifier::builder_with_provider(
                 server_verifier_builder.roots,
-                rustls::crypto::ring::default_provider().into(),
+                provider,
             )
             .with_crls(server_verifier_builder.crls);
             match server_verifier_builder.revocation_depth {
@@ -1063,12 +987,30 @@ impl rustls_server_cert_verifier {
     ///
     /// [`rustls-platform-verifier`]: https://github.com/rustls/rustls-platform-verifier
     #[no_mangle]
-    pub extern "C" fn rustls_platform_server_cert_verifier() -> *mut rustls_server_cert_verifier {
+    pub extern "C" fn rustls_platform_server_cert_verifier(
+        verifier_out: *mut *mut rustls_server_cert_verifier,
+    ) -> rustls_result {
         ffi_panic_boundary! {
-            let verifier: Arc<dyn ServerCertVerifier> = Arc::new(
-                rustls_platform_verifier::Verifier::new()
-                    .with_provider(rustls::crypto::ring::default_provider().into()),
-            );
+            let verifier_out = try_mut_from_ptr_ptr!(verifier_out);
+            let provider = match CryptoProvider::get_default().cloned() {
+                Some(provider) => provider,
+                None => return rustls_result::NoDefaultCryptoProvider,
+            };
+            let verifier: Arc<dyn ServerCertVerifier> =
+                Arc::new(rustls_platform_verifier::Verifier::new().with_provider(provider));
+            set_boxed_mut_ptr(verifier_out, verifier);
+            rustls_result::Ok
+        }
+    }
+
+    #[no_mangle]
+    pub extern "C" fn rustls_platform_server_cert_verifier_with_provider(
+        provider: *const rustls_crypto_provider,
+    ) -> *mut rustls_server_cert_verifier {
+        ffi_panic_boundary! {
+            let provider = try_clone_arc!(provider);
+            let verifier: Arc<dyn ServerCertVerifier> =
+                Arc::new(rustls_platform_verifier::Verifier::new().with_provider(provider));
             to_boxed_mut_ptr(verifier)
         }
     }
@@ -1081,55 +1023,5 @@ impl rustls_server_cert_verifier {
         ffi_panic_boundary! {
             free_box(verifier);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::str;
-
-    #[test]
-    fn all_cipher_suites_arrays() {
-        assert_eq!(RUSTLS_ALL_CIPHER_SUITES_LEN, ALL_CIPHER_SUITES.len());
-        for (original, ffi) in ALL_CIPHER_SUITES
-            .iter()
-            .zip(unsafe { RUSTLS_ALL_CIPHER_SUITES }.iter().copied())
-        {
-            let ffi_cipher_suite = try_ref_from_ptr!(ffi);
-            assert_eq!(original, ffi_cipher_suite);
-        }
-    }
-
-    #[test]
-    fn default_cipher_suites_arrays() {
-        assert_eq!(
-            RUSTLS_DEFAULT_CIPHER_SUITES_LEN,
-            DEFAULT_CIPHER_SUITES.len()
-        );
-        for (original, ffi) in DEFAULT_CIPHER_SUITES
-            .iter()
-            .zip(unsafe { RUSTLS_DEFAULT_CIPHER_SUITES }.iter().copied())
-        {
-            let ffi_cipher_suite = try_ref_from_ptr!(ffi);
-            assert_eq!(original, ffi_cipher_suite);
-        }
-    }
-
-    #[test]
-    fn ciphersuite_get_name() {
-        let suite = rustls_all_ciphersuites_get_entry(0);
-        let s = rustls_supported_ciphersuite_get_name(suite);
-        let want = "TLS13_AES_256_GCM_SHA384";
-        unsafe {
-            let got = str::from_utf8(slice::from_raw_parts(s.data as *const u8, s.len)).unwrap();
-            assert_eq!(want, got)
-        }
-    }
-
-    #[test]
-    fn test_all_ciphersuites_len() {
-        let len = rustls_all_ciphersuites_len();
-        assert!(len > 2);
     }
 }

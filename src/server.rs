@@ -5,7 +5,6 @@ use std::slice;
 use std::sync::Arc;
 
 use libc::size_t;
-use rustls::crypto::ring::ALL_CIPHER_SUITES;
 use rustls::server::danger::ClientCertVerifier;
 use rustls::server::{
     ClientHello, ResolvesServerCert, ServerConfig, ServerConnection, StoresServerSessions,
@@ -14,10 +13,9 @@ use rustls::server::{
 use rustls::sign::CertifiedKey;
 use rustls::{ProtocolVersion, SignatureScheme, WantsVerifier};
 
-use crate::cipher::{
-    rustls_certified_key, rustls_client_cert_verifier, rustls_supported_ciphersuite,
-};
+use crate::cipher::{rustls_certified_key, rustls_client_cert_verifier};
 use crate::connection::{rustls_connection, Connection};
+use crate::crypto::rustls_crypto_provider;
 use crate::error::rustls_result::{InvalidParameter, NullParameter};
 use crate::error::{map_error, rustls_result};
 use crate::rslice::{rustls_slice_bytes, rustls_slice_slice_bytes, rustls_slice_u16, rustls_str};
@@ -61,18 +59,12 @@ impl rustls_server_config_builder {
     /// eventually call rustls_server_config_builder_build, then free the
     /// resulting rustls_server_config. This uses rustls safe default values
     /// for the cipher suites, key exchange groups and protocol versions.
+    // TODO(XXX): Describe use of default provider.
     #[no_mangle]
     pub extern "C" fn rustls_server_config_builder_new() -> *mut rustls_server_config_builder {
         ffi_panic_boundary! {
-            // Unwrap safety: *ring* default provider always has ciphersuites compatible with the
-            // default protocol versions.
-            let base = ServerConfig::builder_with_provider(
-                rustls::crypto::ring::default_provider().into(),
-            )
-            .with_safe_default_protocol_versions()
-            .unwrap();
             let builder = ServerConfigBuilder {
-                base,
+                base: ServerConfig::builder(),
                 verifier: WebPkiClientVerifier::no_client_auth(),
                 cert_resolver: None,
                 session_storage: None,
@@ -99,25 +91,13 @@ impl rustls_server_config_builder {
     /// ownership. `len` is the number of consecutive `uint16_t` pointed to by `versions`.
     #[no_mangle]
     pub extern "C" fn rustls_server_config_builder_new_custom(
-        cipher_suites: *const *const rustls_supported_ciphersuite,
-        cipher_suites_len: size_t,
+        provider: *const rustls_crypto_provider,
         tls_versions: *const u16,
         tls_versions_len: size_t,
         builder_out: *mut *mut rustls_server_config_builder,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            if builder_out.is_null() {
-                return NullParameter;
-            }
-            let cipher_suites = try_slice!(cipher_suites, cipher_suites_len);
-            let mut cs_vec = Vec::new();
-            for &cs in cipher_suites.iter() {
-                let cs = try_ref_from_ptr!(cs);
-                match ALL_CIPHER_SUITES.iter().find(|&acs| cs.eq(acs)) {
-                    Some(scs) => cs_vec.push(*scs),
-                    None => return InvalidParameter,
-                }
-            }
+            let provider = try_clone_arc!(provider);
 
             let tls_versions = try_slice!(tls_versions, tls_versions_len);
             let mut versions = vec![];
@@ -129,18 +109,13 @@ impl rustls_server_config_builder {
                     versions.push(&rustls::version::TLS13);
                 }
             }
-
             let builder_out = try_mut_from_ptr_ptr!(builder_out);
 
-            let provider = rustls::crypto::CryptoProvider {
-                cipher_suites: cs_vec,
-                ..rustls::crypto::ring::default_provider()
-            };
-            let result = rustls::ServerConfig::builder_with_provider(provider.into())
+            let result = ServerConfig::builder_with_provider(provider.clone())
                 .with_protocol_versions(&versions);
             let base = match result {
                 Ok(new) => new,
-                Err(_) => return rustls_result::InvalidParameter,
+                Err(_) => return InvalidParameter,
             };
 
             let builder = ServerConfigBuilder {
@@ -524,6 +499,7 @@ impl ResolvesServerCert for ClientHelloResolver {
 /// as the registered callbacks are thread safe. This is
 /// documented as a requirement in the API.
 unsafe impl Sync for ClientHelloResolver {}
+
 unsafe impl Send for ClientHelloResolver {}
 
 impl Debug for ClientHelloResolver {
@@ -645,6 +621,7 @@ impl rustls_server_config_builder {
 
 #[cfg(test)]
 mod tests {
+    use crate::crypto::rustls_ring_crypto_provider;
     use std::ptr::null_mut;
 
     use super::*;
@@ -685,12 +662,29 @@ mod tests {
         let builder = rustls_server_config_builder::rustls_server_config_builder_new();
         let cert_pem = include_str!("../testdata/localhost/cert.pem").as_bytes();
         let key_pem = include_str!("../testdata/localhost/key.pem").as_bytes();
+
+        #[cfg(feature = "ring")]
+        let crypto_provider = rustls_ring_crypto_provider();
+
+        let mut signing_key = null_mut();
+        let result = rustls_crypto_provider::rustls_crypto_provider_load_key(
+            crypto_provider,
+            key_pem.as_ptr(),
+            key_pem.len(),
+            &mut signing_key,
+        );
+        if !matches!(result, rustls_result::Ok) {
+            panic!(
+                "expected RUSTLS_RESULT_OK from rustls_crypto_provider_load_key, got {:?}",
+                result
+            );
+        }
+
         let mut certified_key = null();
         let result = rustls_certified_key::rustls_certified_key_build(
             cert_pem.as_ptr(),
             cert_pem.len(),
-            key_pem.as_ptr(),
-            key_pem.len(),
+            signing_key,
             &mut certified_key,
         );
         if !matches!(result, rustls_result::Ok) {
@@ -730,7 +724,7 @@ mod tests {
 
         assert_eq!(
             rustls_connection::rustls_connection_get_negotiated_ciphersuite(conn),
-            null()
+            0,
         );
         assert_eq!(
             rustls_connection::rustls_connection_get_peer_certificate(conn, 0),

@@ -7,7 +7,7 @@ endif
 CARGO ?= cargo
 CARGOFLAGS += --locked
 
-CFLAGS := -Werror -Wall -Wextra -Wpedantic -g -I src/
+CFLAGS := -Werror -Wall -Wextra -Wpedantic -D DEFINE_RING -g -I src/
 PROFILE := release
 DESTDIR=/usr/local
 

@@ -232,8 +232,7 @@ main(int argc, const char **argv)
 {
   int ret = 1;
   int sockfd = 0;
-  struct rustls_server_config_builder *config_builder =
-    rustls_server_config_builder_new();
+  struct rustls_server_config_builder *config_builder;
   const struct rustls_server_config *server_config = NULL;
   struct rustls_connection *rconn = NULL;
   const struct rustls_certified_key *certified_key = NULL;
@@ -243,6 +242,9 @@ main(int argc, const char **argv)
   struct rustls_web_pki_client_cert_verifier_builder
     *client_cert_verifier_builder = NULL;
   struct rustls_client_cert_verifier *client_cert_verifier = NULL;
+  struct rustls_crypto_provider_builder *provider_builder = NULL;
+  const struct rustls_crypto_provider *ring_provider = NULL;
+  struct rustls_signing_key *signing_key = NULL;
 
   /* Set this global variable for logging purposes. */
   programname = "server";
@@ -267,11 +269,35 @@ main(int argc, const char **argv)
     goto cleanup;
   }
 
-  certified_key = load_cert_and_key(argv[1], argv[2]);
+  ring_provider = rustls_ring_crypto_provider();
+
+  rustls_result result = rustls_crypto_provider_builder_new_with_base(
+    ring_provider, &provider_builder);
+  if(result != RUSTLS_RESULT_OK) {
+    fprintf(stderr, "server: failed to create crypto provider builder\n");
+    goto cleanup;
+  }
+
+  result = rustls_crypto_provider_builder_build_default(provider_builder);
+  if(result != RUSTLS_RESULT_OK) {
+    fprintf(stderr, "server: failed to set default crypto provider\n");
+    goto cleanup;
+  }
+
+  signing_key = load_signing_key(ring_provider, argv[2]);
+  if(signing_key == NULL) {
+    fprintf(stderr,
+            "client: failed to get signing key from crypto provider\n");
+    goto cleanup;
+  }
+  printf("signing key: %p\n", (void *)signing_key);
+
+  certified_key = load_cert_and_key(ring_provider, argv[1], argv[2]);
   if(certified_key == NULL) {
     goto cleanup;
   }
 
+  config_builder = rustls_server_config_builder_new();
   rustls_server_config_builder_set_certified_keys(
     config_builder, &certified_key, 1);
   rustls_server_config_builder_set_alpn_protocols(
@@ -412,6 +438,9 @@ cleanup:
   rustls_client_cert_verifier_free(client_cert_verifier);
   rustls_server_config_free(server_config);
   rustls_connection_free(rconn);
+  rustls_signing_key_free(signing_key);
+  rustls_crypto_provider_builder_free(provider_builder);
+  rustls_crypto_provider_free(ring_provider);
   if(sockfd > 0) {
     close(sockfd);
   }

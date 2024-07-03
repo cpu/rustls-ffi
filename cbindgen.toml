@@ -12,7 +12,8 @@ include = ["rustls_tls_version"]
 
 [defines]
 "feature = read_buf" = "DEFINE_READ_BUF"
+"feature = ring" = "DEFINE_RING"
 
 [parse.expand]
 crates = ["rustls-ffi"]
-features = ["read_buf"]
+features = ["read_buf", "ring"]

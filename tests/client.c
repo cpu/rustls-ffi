@@ -411,8 +411,7 @@ main(int argc, const char **argv)
   /* Set this global variable for logging purposes. */
   programname = "client";
 
-  struct rustls_client_config_builder *config_builder =
-    rustls_client_config_builder_new();
+  struct rustls_client_config_builder *config_builder = NULL;
   struct rustls_root_cert_store_builder *server_cert_root_store_builder = NULL;
   const struct rustls_root_cert_store *server_cert_root_store = NULL;
   const struct rustls_client_config *client_config = NULL;
@@ -421,6 +420,12 @@ main(int argc, const char **argv)
   struct rustls_server_cert_verifier *server_cert_verifier = NULL;
   struct rustls_slice_bytes alpn_http11;
   const struct rustls_certified_key *certified_key = NULL;
+  struct rustls_crypto_provider_builder *provider_builder = NULL;
+  const struct rustls_crypto_provider *ring_provider = NULL;
+  const struct rustls_supported_ciphersuites *ring_supported = NULL;
+  const struct rustls_supported_ciphersuite *custom_ciphersuite = NULL;
+  const struct rustls_crypto_provider *custom_provider = NULL;
+  const struct rustls_supported_ciphersuites *custom_supported = NULL;
 
   alpn_http11.data = (unsigned char *)"http/1.1";
   alpn_http11.len = 8;
@@ -431,8 +436,92 @@ main(int argc, const char **argv)
   setmode(STDOUT_FILENO, O_BINARY);
 #endif
 
+  ring_provider = rustls_ring_crypto_provider();
+
+  result = rustls_crypto_provider_ciphersuites(ring_provider, &ring_supported);
+  if(result != RUSTLS_RESULT_OK) {
+    fprintf(
+      stderr,
+      "client: failed to get supported ciphersuites from ring provider\n");
+    goto cleanup;
+  }
+
+  int num_supported = rustls_supported_ciphersuites_len(ring_supported);
+  for(int i = 0; i < num_supported; i++) {
+    const struct rustls_supported_ciphersuite *suite =
+      rustls_supported_ciphersuites_get(ring_supported, i);
+    if(suite == NULL) {
+      fprintf(stderr, "client: failed to get ciphersuite %d\n", i);
+      goto cleanup;
+    }
+    const rustls_str suite_name = rustls_supported_ciphersuite_get_name(suite);
+
+    if(strncmp(suite_name.data,
+               //"TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
+               "TLS13_AES_256_GCM_SHA384",
+               suite_name.len) == 0) {
+      custom_ciphersuite = suite;
+    }
+  }
+  printf("selected ciphersuite: %p\n", (void *)custom_ciphersuite);
+
+  result = rustls_crypto_provider_builder_new_with_base(ring_provider,
+                                                        &provider_builder);
+  if(result != RUSTLS_RESULT_OK) {
+    fprintf(stderr, "client: failed to create crypto provider builder\n");
+    goto cleanup;
+  }
+
+  result = rustls_crypto_provider_builder_set_cipher_suites(
+    provider_builder, &custom_ciphersuite, 1);
+  if(result != RUSTLS_RESULT_OK) {
+    fprintf(stderr, "client: failed to set custom ciphersuite\n");
+    goto cleanup;
+  }
+
+  result = rustls_crypto_provider_builder_build_default(provider_builder);
+  if(result != RUSTLS_RESULT_OK) {
+    fprintf(stderr, "client: failed to set default crypto provider\n");
+    goto cleanup;
+  }
+
+  custom_provider = rustls_crypto_provider_default();
+  if(custom_provider == NULL) {
+    fprintf(stderr, "client: failed to get default crypto provider\n");
+    goto cleanup;
+  }
+
+  result =
+    rustls_crypto_provider_ciphersuites(custom_provider, &custom_supported);
+  if(result != RUSTLS_RESULT_OK) {
+    fprintf(
+      stderr,
+      "client: failed to get supported ciphersuites from crypto provider\n");
+    goto cleanup;
+  }
+
+  num_supported = rustls_supported_ciphersuites_len(custom_supported);
+  printf("client: found %d supported ciphersuites\n", num_supported);
+  for(int i = 0; i < num_supported; i++) {
+    const struct rustls_supported_ciphersuite *suite =
+      rustls_supported_ciphersuites_get(custom_supported, i);
+    if(suite == NULL) {
+      fprintf(stderr, "client: failed to get ciphersuite %d\n", i);
+      goto cleanup;
+    }
+    const rustls_str suite_name = rustls_supported_ciphersuite_get_name(suite);
+
+    printf("client: supported ciphersuite %d: %.*s\n",
+           i,
+           (int)suite_name.len,
+           suite_name.data);
+  }
+
+  config_builder = rustls_client_config_builder_new();
+
   if(getenv("RUSTLS_PLATFORM_VERIFIER")) {
-    server_cert_verifier = rustls_platform_server_cert_verifier();
+    server_cert_verifier =
+      rustls_platform_server_cert_verifier_with_provider(custom_provider);
     if(server_cert_verifier == NULL) {
       goto cleanup;
     }
@@ -483,7 +572,7 @@ main(int argc, const char **argv)
     goto cleanup;
   }
   else if(auth_cert && auth_key) {
-    certified_key = load_cert_and_key(auth_cert, auth_key);
+    certified_key = load_cert_and_key(custom_provider, auth_cert, auth_key);
     if(certified_key == NULL) {
       goto cleanup;
     }
@@ -515,6 +604,11 @@ cleanup:
   rustls_server_cert_verifier_free(server_cert_verifier);
   rustls_certified_key_free(certified_key);
   rustls_client_config_free(client_config);
+  rustls_crypto_provider_builder_free(provider_builder);
+  rustls_supported_ciphersuites_free(custom_supported);
+  rustls_crypto_provider_free(custom_provider);
+  rustls_supported_ciphersuites_free(ring_supported);
+  rustls_crypto_provider_free(ring_provider);
 
 #ifdef _WIN32
   WSACleanup();
