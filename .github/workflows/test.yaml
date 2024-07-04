@@ -17,7 +17,8 @@ jobs:
     strategy:
       matrix:
         # test a bunch of toolchains on ubuntu
-        cc: [clang, gcc]
+        cc: [ clang, gcc ]
+        crypto: [ ring, aws_lc_rs ]
         rust:
           - stable
           - beta
@@ -25,7 +26,7 @@ jobs:
           # MSRV - keep in sync with what rustls and rustls-platform-verifier
           # consider MSRV
           - 1.64.0
-        os: [ubuntu-latest]
+        os: [ ubuntu-latest ]
         # but only stable on macos/windows (slower platforms)
         include:
           - os: macos-latest
@@ -43,9 +44,9 @@ jobs:
           toolchain: ${{ matrix.rust }}
       - env:
           CARGO_UNSTABLE_HTTP_REGISTRY: true
-        run: make CC=${{ matrix.cc }} PROFILE=debug test integration
+        run: make CC=${{ matrix.cc }} PROFILE=debug CRYPTO_PROVIDER=${{ matrix.crypto }} test integration
       - name: Platform verifier connect test
-        run: make PROFILE=debug connect-test
+        run: make PROFILE=debug CRYPTO_PROVIDER=${{ matrix.crypto }} connect-test
       - name: Verify debug builds were using ASAN
         if: runner.os == 'Linux' # For 'nm'
         run: |
@@ -200,6 +201,8 @@ jobs:
         # If we suppress (e.g. #![allow(clippy::arc_with_non_send_sync)]),
         # we would get an unknown-lint error from older clippy versions.
         run: cargo clippy --locked --workspace --all-targets -- -D warnings -A unknown-lints
+      - name: Check clippy (aws-lc-rs)
+        run: cargo clippy --locked --workspace --all-targets --no-default-features --features=aws_lc_rs -- -D warnings -A unknown-lints
 
   clippy-nightly-optional:
     name: Clippy nightly (optional)
@@ -215,6 +218,8 @@ jobs:
           components: clippy
       - name: Check clippy (default features)
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Check clippy (aws-lc-rs)
+        run: cargo clippy --locked --workspace --all-targets --no-default-features --features=aws_lc_rs -- -D warnings
       - name: Check clippy (all features)
         # We only test --all-features on nightly, because two of the features
         # (read_buf, core_io_borrowed_buf) require nightly.
@@ -230,18 +235,6 @@ jobs:
           persist-credentials: false
       - name: Clang tidy
         run: clang-tidy tests/*.c -- -I src/
-
-  cargo-c:
-    name: cargo-c
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Install rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-
 
   miri:
     name: Miri
