@@ -45,17 +45,19 @@ jobs:
       - env:
           CARGO_UNSTABLE_HTTP_REGISTRY: true
         run: make CC=${{ matrix.cc }} PROFILE=debug CRYPTO_PROVIDER=${{ matrix.crypto }} test integration
-      - name: Platform verifier connect test
-        run: make PROFILE=debug CRYPTO_PROVIDER=${{ matrix.crypto }} connect-test
       - name: Verify debug builds were using ASAN
         if: runner.os == 'Linux' # For 'nm'
         run: |
           nm target/client | grep '__asan_init'
           nm target/server | grep '__asan_init'
+      - name: Platform verifier connect test
+        # TODO(XXX): clean is required for some reason, otherwise the librustls.a is missing
+        #            symbols for the given crypto provider. Need to debug further.
+        run: make PROFILE=debug CRYPTO_PROVIDER=${{ matrix.crypto }} clean connect-test
       - name: Build release binaries
         run: |
           make clean
-          make CC=${{ matrix.cc }} PROFILE=release
+          make CC=${{ matrix.cc }} CRYPTO_PROVIDER=${{ matrix.crypto }} PROFILE=release
       - name: Verify release builds were not using ASAN
         if: runner.os == 'Linux' # For 'nm'
         run: |
