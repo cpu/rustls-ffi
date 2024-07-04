@@ -623,10 +623,10 @@ impl rustls_server_config_builder {
 mod tests {
     use std::ptr::null_mut;
 
-    #[cfg(feature = "ring")]
-    use crate::crypto::rustls_ring_crypto_provider;
     #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
     use crate::crypto::rustls_aws_lc_rs_crypto_provider;
+    #[cfg(feature = "ring")]
+    use crate::crypto::rustls_ring_crypto_provider;
 
     use super::*;
 

@@ -744,10 +744,7 @@ mod tests {
         let expected_schemes = &[1025, 1027, 1281, 1283, 1537, 2052, 2053, 2054, 2055];
         #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))] // aws-lc-rs includes P-521.
         let expected_schemes = &[1025, 1027, 1281, 1283, 1537, 1539, 2052, 2053, 2054, 2055];
-        assert_eq!(
-            &signature_schemes,
-            expected_schemes,
-        );
+        assert_eq!(&signature_schemes, expected_schemes,);
 
         let mut alpn = vec![];
         for i in 0.. {
