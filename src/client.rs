@@ -587,6 +587,8 @@ mod tests {
 
     #[test]
     fn test_config_builder() {
+        ensure_provider();
+
         let builder = rustls_client_config_builder::rustls_client_config_builder_new();
         let h1 = "http/1.1".as_bytes();
         let h2 = "h2".as_bytes();
@@ -610,6 +612,8 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn test_client_connection_new() {
+        ensure_provider();
+
         let builder = rustls_client_config_builder::rustls_client_config_builder_new();
         let config = rustls_client_config_builder::rustls_client_config_builder_build(builder);
         let mut conn = null_mut();
@@ -655,6 +659,8 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn test_client_connection_new_ipaddress() {
+        ensure_provider();
+
         let builder = rustls_client_config_builder::rustls_client_config_builder_new();
         let config = rustls_client_config_builder::rustls_client_config_builder_build(builder);
         let mut conn = null_mut();
@@ -666,5 +672,15 @@ mod tests {
         if !matches!(result, rustls_result::Ok) {
             panic!("expected RUSTLS_RESULT_OK, got {:?}", result);
         }
+    }
+
+    fn ensure_provider() {
+        if CryptoProvider::get_default().is_some() {
+            return;
+        }
+        #[cfg(feature = "ring")]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     }
 }

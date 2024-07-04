@@ -619,6 +619,11 @@ mod tests {
 
     // Generate the bytes of a ClientHello for example.com. Helper function.
     fn client_hello_bytes() -> VecDeque<u8> {
+        #[cfg(feature = "ring")]
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
+        let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
+
         type ccb = rustls_client_config_builder;
         type conn = rustls_connection;
         let builder = ccb::rustls_client_config_builder_new();
