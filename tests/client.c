@@ -421,8 +421,8 @@ main(int argc, const char **argv)
   struct rustls_slice_bytes alpn_http11;
   const struct rustls_certified_key *certified_key = NULL;
   struct rustls_crypto_provider_builder *provider_builder = NULL;
-  const struct rustls_crypto_provider *ring_provider = NULL;
-  const struct rustls_supported_ciphersuites *ring_supported = NULL;
+  const struct rustls_crypto_provider *default_provider = NULL;
+  const struct rustls_supported_ciphersuites *default_supported = NULL;
   const struct rustls_supported_ciphersuite *custom_ciphersuite = NULL;
   const struct rustls_crypto_provider *custom_provider = NULL;
   const struct rustls_supported_ciphersuites *custom_supported = NULL;
@@ -436,36 +436,39 @@ main(int argc, const char **argv)
   setmode(STDOUT_FILENO, O_BINARY);
 #endif
 
-  ring_provider = rustls_ring_crypto_provider();
+#ifdef DEFINE_RING
+  default_provider = rustls_ring_crypto_provider();
+#else
+  default_provider = rustls_aws_lc_rs_crypto_provider();
+#endif
 
-  result = rustls_crypto_provider_ciphersuites(ring_provider, &ring_supported);
+  result =
+    rustls_crypto_provider_ciphersuites(default_provider, &default_supported);
   if(result != RUSTLS_RESULT_OK) {
     fprintf(
       stderr,
-      "client: failed to get supported ciphersuites from ring provider\n");
+      "client: failed to get supported ciphersuites from default provider\n");
     goto cleanup;
   }
 
-  int num_supported = rustls_supported_ciphersuites_len(ring_supported);
-  for(int i = 0; i < num_supported; i++) {
+  size_t num_supported = rustls_supported_ciphersuites_len(default_supported);
+  for(size_t i = 0; i < num_supported; i++) {
     const struct rustls_supported_ciphersuite *suite =
-      rustls_supported_ciphersuites_get(ring_supported, i);
+      rustls_supported_ciphersuites_get(default_supported, i);
     if(suite == NULL) {
-      fprintf(stderr, "client: failed to get ciphersuite %d\n", i);
+      fprintf(stderr, "client: failed to get ciphersuite %zu\n", i);
       goto cleanup;
     }
     const rustls_str suite_name = rustls_supported_ciphersuite_get_name(suite);
 
-    if(strncmp(suite_name.data,
-               //"TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256",
-               "TLS13_AES_256_GCM_SHA384",
-               suite_name.len) == 0) {
+    if(strncmp(suite_name.data, "TLS13_AES_256_GCM_SHA384", suite_name.len) ==
+       0) {
       custom_ciphersuite = suite;
     }
   }
   printf("selected ciphersuite: %p\n", (void *)custom_ciphersuite);
 
-  result = rustls_crypto_provider_builder_new_with_base(ring_provider,
+  result = rustls_crypto_provider_builder_new_with_base(default_provider,
                                                         &provider_builder);
   if(result != RUSTLS_RESULT_OK) {
     fprintf(stderr, "client: failed to create crypto provider builder\n");
@@ -501,17 +504,17 @@ main(int argc, const char **argv)
   }
 
   num_supported = rustls_supported_ciphersuites_len(custom_supported);
-  printf("client: found %d supported ciphersuites\n", num_supported);
-  for(int i = 0; i < num_supported; i++) {
+  printf("client: found %zu supported ciphersuites\n", num_supported);
+  for(size_t i = 0; i < num_supported; i++) {
     const struct rustls_supported_ciphersuite *suite =
       rustls_supported_ciphersuites_get(custom_supported, i);
     if(suite == NULL) {
-      fprintf(stderr, "client: failed to get ciphersuite %d\n", i);
+      fprintf(stderr, "client: failed to get ciphersuite %zu\n", i);
       goto cleanup;
     }
     const rustls_str suite_name = rustls_supported_ciphersuite_get_name(suite);
 
-    printf("client: supported ciphersuite %d: %.*s\n",
+    printf("client: supported ciphersuite %zu: %.*s\n",
            i,
            (int)suite_name.len,
            suite_name.data);
@@ -607,8 +610,8 @@ cleanup:
   rustls_crypto_provider_builder_free(provider_builder);
   rustls_supported_ciphersuites_free(custom_supported);
   rustls_crypto_provider_free(custom_provider);
-  rustls_supported_ciphersuites_free(ring_supported);
-  rustls_crypto_provider_free(ring_provider);
+  rustls_supported_ciphersuites_free(default_supported);
+  rustls_crypto_provider_free(default_provider);
 
 #ifdef _WIN32
   WSACleanup();

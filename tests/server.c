@@ -243,8 +243,7 @@ main(int argc, const char **argv)
     *client_cert_verifier_builder = NULL;
   struct rustls_client_cert_verifier *client_cert_verifier = NULL;
   struct rustls_crypto_provider_builder *provider_builder = NULL;
-  const struct rustls_crypto_provider *ring_provider = NULL;
-  struct rustls_signing_key *signing_key = NULL;
+  const struct rustls_crypto_provider *default_provider = NULL;
 
   /* Set this global variable for logging purposes. */
   programname = "server";
@@ -269,10 +268,14 @@ main(int argc, const char **argv)
     goto cleanup;
   }
 
-  ring_provider = rustls_ring_crypto_provider();
+#ifdef DEFINE_RING
+  default_provider = rustls_ring_crypto_provider();
+#else
+  default_provider = rustls_aws_lc_rs_crypto_provider();
+#endif
 
   rustls_result result = rustls_crypto_provider_builder_new_with_base(
-    ring_provider, &provider_builder);
+    default_provider, &provider_builder);
   if(result != RUSTLS_RESULT_OK) {
     fprintf(stderr, "server: failed to create crypto provider builder\n");
     goto cleanup;
@@ -284,15 +287,7 @@ main(int argc, const char **argv)
     goto cleanup;
   }
 
-  signing_key = load_signing_key(ring_provider, argv[2]);
-  if(signing_key == NULL) {
-    fprintf(stderr,
-            "client: failed to get signing key from crypto provider\n");
-    goto cleanup;
-  }
-  printf("signing key: %p\n", (void *)signing_key);
-
-  certified_key = load_cert_and_key(ring_provider, argv[1], argv[2]);
+  certified_key = load_cert_and_key(default_provider, argv[1], argv[2]);
   if(certified_key == NULL) {
     goto cleanup;
   }
@@ -438,9 +433,8 @@ cleanup:
   rustls_client_cert_verifier_free(client_cert_verifier);
   rustls_server_config_free(server_config);
   rustls_connection_free(rconn);
-  rustls_signing_key_free(signing_key);
   rustls_crypto_provider_builder_free(provider_builder);
-  rustls_crypto_provider_free(ring_provider);
+  rustls_crypto_provider_free(default_provider);
   if(sockfd > 0) {
     close(sockfd);
   }

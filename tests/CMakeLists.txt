@@ -11,6 +11,7 @@ add_executable(client client.c common.c)
 add_dependencies(client rustls-ffi)
 target_include_directories(client PUBLIC ${CMAKE_SOURCE_DIR}/src)
 IF (WIN32)
+    # TODO: Allow selecting all, or aws-lc-rs providers.
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D DEFINE_RING")
     target_link_libraries(
             client
@@ -31,6 +32,7 @@ add_executable(server server.c common.c)
 add_dependencies(server rustls-ffi)
 target_include_directories(server PUBLIC ${CMAKE_SOURCE_DIR}/src)
 IF (WIN32)
+    # TODO: Allow selecting all, or aws-lc-rs providers.
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D DEFINE_RING")
     target_link_libraries(
             server

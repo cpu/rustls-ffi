@@ -509,7 +509,11 @@ mod tests {
 
     use crate::cipher::rustls_certified_key;
     use crate::client::{rustls_client_config, rustls_client_config_builder};
-    use crate::crypto::{rustls_crypto_provider, rustls_ring_crypto_provider};
+    #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
+    use crate::crypto::rustls_aws_lc_rs_crypto_provider;
+    use crate::crypto::rustls_crypto_provider;
+    #[cfg(feature = "ring")]
+    use crate::crypto::rustls_ring_crypto_provider;
     use crate::server::rustls_server_config_builder;
 
     use super::*;
@@ -660,6 +664,9 @@ mod tests {
 
         #[cfg(feature = "ring")]
         let crypto_provider = rustls_ring_crypto_provider();
+        #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
+        let crypto_provider = rustls_aws_lc_rs_crypto_provider();
+
         let mut signing_key = null_mut();
         let result = rustls_crypto_provider::rustls_crypto_provider_load_key(
             crypto_provider,
@@ -733,9 +740,13 @@ mod tests {
         }
         // Sort to ensure consistent comparison
         signature_schemes.sort();
+        #[cfg(feature = "ring")]
+        let expected_schemes = &[1025, 1027, 1281, 1283, 1537, 2052, 2053, 2054, 2055];
+        #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))] // aws-lc-rs includes P-521.
+        let expected_schemes = &[1025, 1027, 1281, 1283, 1537, 1539, 2052, 2053, 2054, 2055];
         assert_eq!(
             &signature_schemes,
-            &[1025, 1027, 1281, 1283, 1537, 2052, 2053, 2054, 2055]
+            expected_schemes,
         );
 
         let mut alpn = vec![];

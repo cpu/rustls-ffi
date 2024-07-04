@@ -1645,6 +1645,10 @@ void rustls_connection_free(struct rustls_connection *conn);
 const struct rustls_crypto_provider *rustls_ring_crypto_provider(void);
 #endif
 
+#if defined(DEFINE_AWS_LC_RS)
+const struct rustls_crypto_provider *rustls_aws_lc_rs_crypto_provider(void);
+#endif
+
 /**
  * TODO(XXX): docs
  * Creates a provider builder using the default crypto provider as the base.

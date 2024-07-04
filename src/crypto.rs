@@ -3,6 +3,8 @@ use std::io::Cursor;
 use std::slice;
 use std::sync::Arc;
 
+#[cfg(feature = "aws_lc_rs")]
+use rustls::crypto::aws_lc_rs;
 #[cfg(feature = "ring")]
 use rustls::crypto::ring;
 use rustls::crypto::CryptoProvider;
@@ -22,6 +24,14 @@ use crate::{
 pub extern "C" fn rustls_ring_crypto_provider() -> *const rustls_crypto_provider {
     ffi_panic_boundary! {
         Arc::into_raw(Arc::new(ring::default_provider())) as *const rustls_crypto_provider
+    }
+}
+
+#[cfg(feature = "aws_lc_rs")]
+#[no_mangle]
+pub extern "C" fn rustls_aws_lc_rs_crypto_provider() -> *const rustls_crypto_provider {
+    ffi_panic_boundary! {
+        Arc::into_raw(Arc::new(aws_lc_rs::default_provider())) as *const rustls_crypto_provider
     }
 }
 

@@ -7,7 +7,7 @@ endif
 CARGO ?= cargo
 CARGOFLAGS += --locked
 
-CFLAGS := -Werror -Wall -Wextra -Wpedantic -D DEFINE_RING -g -I src/
+CFLAGS := -Werror -Wall -Wextra -Wpedantic -g -I src/
 PROFILE := release
 DESTDIR=/usr/local
 
@@ -24,6 +24,17 @@ endif
 ifneq (,$(TARGET))
 	PROFILE := $(TARGET)/$(PROFILE)
 	CARGOFLAGS += --target $(TARGET)
+endif
+
+ifeq ($(CRYPTO_PROVIDER), aws_lc_rs)
+	CFLAGS += -D DEFINE_AWS_LC_RS
+	CARGOFLAGS += --no-default-features --features aws_lc_rs
+else ifeq ($(CRYPTO_PROVIDER), all)
+	CFLAGS += -D DEFINE_RING -D DEFINE_AWS_LC_RS
+	CARGOFLAGS += --features ring,aws_lc_rs
+else
+	CFLAGS += -D DEFINE_RING
+	CARGOFLAGS += --features ring
 endif
 
 all: target/client target/server

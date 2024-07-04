@@ -621,8 +621,12 @@ impl rustls_server_config_builder {
 
 #[cfg(test)]
 mod tests {
-    use crate::crypto::rustls_ring_crypto_provider;
     use std::ptr::null_mut;
+
+    #[cfg(feature = "ring")]
+    use crate::crypto::rustls_ring_crypto_provider;
+    #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
+    use crate::crypto::rustls_aws_lc_rs_crypto_provider;
 
     use super::*;
 
@@ -665,6 +669,8 @@ mod tests {
 
         #[cfg(feature = "ring")]
         let crypto_provider = rustls_ring_crypto_provider();
+        #[cfg(all(feature = "aws_lc_rs", not(feature = "ring")))]
+        let crypto_provider = rustls_aws_lc_rs_crypto_provider();
 
         let mut signing_key = null_mut();
         let result = rustls_crypto_provider::rustls_crypto_provider_load_key(
