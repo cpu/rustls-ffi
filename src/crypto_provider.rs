@@ -3,6 +3,9 @@ use std::io::Cursor;
 use std::slice;
 use std::sync::Arc;
 
+#[cfg(feature = "aws_lc_rs")]
+use rustls::crypto::aws_lc_rs;
+#[cfg(feature = "ring")]
 use rustls::crypto::ring;
 use rustls::crypto::CryptoProvider;
 use rustls::sign::SigningKey;
@@ -216,11 +219,22 @@ pub extern "C" fn rustls_crypto_provider_builder_free(
 /// Return the `rustls_crypto_provider` backed by the `*ring*` cryptography library. The
 /// caller owns the returned `rustls_crypto_provider` and must free it using
 /// `rustls_crypto_provider_free`.
-// TODO(@cpu): Add a feature gate when we add support for other crypto providers.
 #[no_mangle]
+#[cfg(feature = "ring")]
 pub extern "C" fn rustls_ring_crypto_provider() -> *const rustls_crypto_provider {
     ffi_panic_boundary! {
         Arc::into_raw(Arc::new(ring::default_provider())) as *const rustls_crypto_provider
+    }
+}
+
+/// Return the `rustls_crypto_provider` backed by the `aws_lc_rs` cryptography library. The
+/// caller owns the returned `rustls_crypto_provider` and must free it using
+/// `rustls_crypto_provider_free`.
+#[no_mangle]
+#[cfg(feature = "aws_lc_rs")]
+pub extern "C" fn rustls_aws_lc_rs_crypto_provider() -> *const rustls_crypto_provider {
+    ffi_panic_boundary! {
+        Arc::into_raw(Arc::new(aws_lc_rs::default_provider())) as *const rustls_crypto_provider
     }
 }
 
@@ -372,6 +386,8 @@ pub(crate) fn ensure_provider() {
     if CryptoProvider::get_default().is_some() {
         return;
     }
-    // TODO(@cpu): Gate this based on crate features.
+    #[cfg(feature = "aws_lc_rs")]
+    let _ = aws_lc_rs::default_provider().install_default();
+    #[cfg(all(feature = "ring", not(feature = "aws_lc_rs")))]
     let _ = ring::default_provider().install_default();
 }
