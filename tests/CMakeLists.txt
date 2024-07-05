@@ -17,7 +17,6 @@ add_executable(client client.c common.c)
 add_dependencies(client rustls-ffi)
 target_include_directories(client PUBLIC ${CMAKE_SOURCE_DIR}/src)
 IF (WIN32)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D ${CRYPTO_PROVIDER}")
     target_link_libraries(
             client
             debug "${CMAKE_SOURCE_DIR}/target/debug/rustls_ffi.lib"
@@ -37,7 +36,6 @@ add_executable(server server.c common.c)
 add_dependencies(server rustls-ffi)
 target_include_directories(server PUBLIC ${CMAKE_SOURCE_DIR}/src)
 IF (WIN32)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D ${CRYPTO_PROVIDER}")
     target_link_libraries(
             server
             debug "${CMAKE_SOURCE_DIR}/target/debug/rustls_ffi.lib"

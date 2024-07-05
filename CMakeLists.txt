@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 
 project(rustls-ffi)
 
-option(CRYPTO_PROVIDER "Crypto provider to use (ring or aws_lc_rs)" ring)
+set(CRYPTO_PROVIDER "" CACHE STRING "Crypto provider to use (ring or aws_lc_rs)")
 
 if (NOT (CRYPTO_PROVIDER STREQUAL "ring" OR CRYPTO_PROVIDER STREQUAL "aws_lc_rs"))
     message(FATAL_ERROR "Invalid crypto provider specified: ${CRYPTO_PROVIDER}. Must be 'ring' or 'aws_lc_rs'.")
