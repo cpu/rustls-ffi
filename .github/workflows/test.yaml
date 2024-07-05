@@ -76,7 +76,7 @@ jobs:
       - run: VALGRIND=valgrind make PROFILE=release test integration
 
   test-windows-cmake-debug:
-    name: Windows CMake, Debug configuration
+    name: Windows CMake
     runs-on: windows-latest
     strategy:
       matrix:
