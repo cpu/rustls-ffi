@@ -242,8 +242,9 @@ main(int argc, const char **argv)
 {
   int ret = 1;
   int sockfd = 0;
-  struct rustls_server_config_builder *config_builder =
-    rustls_server_config_builder_new();
+  const struct rustls_crypto_provider *default_provider = NULL;
+  struct rustls_crypto_provider_builder *provider_builder = NULL;
+  struct rustls_server_config_builder *config_builder = NULL;
   const struct rustls_server_config *server_config = NULL;
   struct rustls_connection *rconn = NULL;
   const struct rustls_certified_key *certified_key = NULL;
@@ -277,11 +278,29 @@ main(int argc, const char **argv)
     goto cleanup;
   }
 
+  // TODO(@cpu): gate this based on #ifdef USE_RING once optional.
+  default_provider = rustls_ring_crypto_provider();
+
+  provider_builder =
+    rustls_crypto_provider_builder_new_with_base(default_provider);
+  if(provider_builder == NULL) {
+    fprintf(stderr, "server: failed to create crypto provider builder\n");
+    goto cleanup;
+  }
+
+  rustls_result result =
+    rustls_crypto_provider_builder_build_as_default(provider_builder);
+  if(result != RUSTLS_RESULT_OK) {
+    fprintf(stderr, "server: failed to set default crypto provider\n");
+    goto cleanup;
+  }
+
   certified_key = load_cert_and_key(argv[1], argv[2]);
   if(certified_key == NULL) {
     goto cleanup;
   }
 
+  config_builder = rustls_server_config_builder_new();
   rustls_server_config_builder_set_certified_keys(
     config_builder, &certified_key, 1);
   rustls_server_config_builder_set_alpn_protocols(
@@ -336,7 +355,11 @@ main(int argc, const char **argv)
                                                      client_cert_verifier);
   }
 
-  server_config = rustls_server_config_builder_build(config_builder);
+  result = rustls_server_config_builder_build(config_builder, &server_config);
+  if(result != RUSTLS_RESULT_OK) {
+    print_error("building server config", result);
+    goto cleanup;
+  }
 
 #ifdef _WIN32
   WSADATA wsa;
@@ -422,6 +445,8 @@ cleanup:
   rustls_client_cert_verifier_free(client_cert_verifier);
   rustls_server_config_free(server_config);
   rustls_connection_free(rconn);
+  rustls_crypto_provider_free(default_provider);
+  rustls_crypto_provider_builder_free(provider_builder);
   if(sockfd > 0) {
     close(sockfd);
   }

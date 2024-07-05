@@ -509,6 +509,7 @@ mod tests {
 
     use crate::cipher::rustls_certified_key;
     use crate::client::{rustls_client_config, rustls_client_config_builder};
+    use crate::crypto_provider::ensure_provider;
     use crate::server::rustls_server_config_builder;
 
     use super::*;
@@ -653,6 +654,8 @@ mod tests {
     }
 
     fn make_server_config() -> *const rustls_server_config {
+        ensure_provider();
+
         let builder = rustls_server_config_builder::rustls_server_config_builder_new();
         let cert_pem = include_str!("../testdata/example.com/cert.pem").as_bytes();
         let key_pem = include_str!("../testdata/example.com/key.pem").as_bytes();
@@ -673,8 +676,11 @@ mod tests {
         assert_eq!(result, rustls_result::Ok);
         rustls_certified_key::rustls_certified_key_free(certified_key);
 
-        let config = rustls_server_config_builder::rustls_server_config_builder_build(builder);
-        assert_ne!(config, null());
+        let mut config = null();
+        let res =
+            rustls_server_config_builder::rustls_server_config_builder_build(builder, &mut config);
+        assert_eq!(res, rustls_result::Ok);
+        assert!(!config.is_null());
         config
     }
 
