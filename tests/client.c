@@ -510,7 +510,7 @@ main(int argc, const char **argv)
     goto cleanup;
   }
   else if(auth_cert && auth_key) {
-    certified_key = load_cert_and_key(auth_cert, auth_key);
+    certified_key = load_cert_and_key(default_provider, auth_cert, auth_key);
     if(certified_key == NULL) {
       goto cleanup;
     }
