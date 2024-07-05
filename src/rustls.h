@@ -1308,7 +1308,19 @@ void rustls_web_pki_server_cert_verifier_builder_free(struct rustls_web_pki_serv
  *
  * [`rustls-platform-verifier`]: https://github.com/rustls/rustls-platform-verifier
  */
-struct rustls_server_cert_verifier *rustls_platform_server_cert_verifier(void);
+rustls_result rustls_platform_server_cert_verifier(struct rustls_server_cert_verifier **verifier_out);
+
+/**
+ * Create a verifier that uses the default behavior for the current platform.
+ *
+ * This uses [`rustls-platform-verifier`][] and the specified crypto provider.
+ *
+ * The verifier can be used in several `rustls_client_config` instances and must be freed by
+ * the application using `rustls_server_cert_verifier_free` when no longer needed.
+ *
+ * [`rustls-platform-verifier`]: https://github.com/rustls/rustls-platform-verifier
+ */
+struct rustls_server_cert_verifier *rustls_platform_server_cert_verifier_with_provider(const struct rustls_crypto_provider *provider);
 
 /**
  * Free a `rustls_server_cert_verifier` previously returned from
@@ -1732,7 +1744,7 @@ void rustls_connection_free(struct rustls_connection *conn);
  *     the `CRYPTO_PROVIDER` build variable.
  *   * Call `rustls_crypto_provider_builder_new_with_base` with the desired provider, and
  *     then install it as the process default with
- *    `rustls_crypto_provider_builder_build_as_default`.
+ *     `rustls_crypto_provider_builder_build_as_default`.
  * * Afterward, as required for customization:
  *   * Use `rustls_crypto_provider_builder_new_from_default` to get a builder backed by the
  *     default crypto provider.
@@ -1756,7 +1768,7 @@ rustls_result rustls_crypto_provider_builder_new_from_default(struct rustls_cryp
  *
  * * Call `rustls_crypto_provider_builder_new_with_base` with a custom provider
  * * Install the custom provider as the process-wide default with
- * `rustls_crypto_provider_builder_build_as_default`.
+ *   `rustls_crypto_provider_builder_build_as_default`.
  *
  * Or, for per-connection customization:
  *
@@ -1835,10 +1847,10 @@ const struct rustls_supported_ciphersuites *rustls_crypto_provider_ciphersuites(
 /**
  * Load a private key from the provided PEM content using the crypto provider.
  *
- * private_key` must point to a buffer of `private_key_len` bytes, containing
+ * `private_key` must point to a buffer of `private_key_len` bytes, containing
  * a PEM-encoded private key. The exact formats supported will differ based on
  * the crypto provider in use. The default providers support PKCS#1, PKCS#8 or
- * SEC1 formats,
+ * SEC1 formats.
  *
  * When this function returns `rustls_result::Ok` a pointer to a `rustls_signing_key`
  * is written to `signing_key_out`. The caller owns the returned `rustls_signing_key`
