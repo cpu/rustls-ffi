@@ -26,6 +26,16 @@ ifneq (,$(TARGET))
 	CARGOFLAGS += --target $(TARGET)
 endif
 
+ifeq ($(CRYPTO_PROVIDER), aws_lc_rs)
+	CFLAGS += -D DEFINE_AWS_LC_RS
+	CARGOFLAGS += --no-default-features --features aws_lc_rs
+else ifeq ($(CRYPTO_PROVIDER), ring)
+	CFLAGS += -D DEFINE_RING
+	CARGOFLAGS += --features ring
+else
+	$error("CRYPTO_PROVIDER must be set to either aws_lc_rs or ring")
+endif
+
 all: target/client target/server
 
 test: all
