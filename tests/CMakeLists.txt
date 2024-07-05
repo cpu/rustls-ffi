@@ -7,12 +7,17 @@ IF (WIN32)
     )
 ENDIF (WIN32)
 
+if (CRYPTO_PROVIDER STREQUAL "ring")
+    add_compile_definitions(DEFINE_RING)
+elseif (CRYPTO_PROVIDER STREQUAL "aws_lc_rs")
+    add_compile_definitions(DEFINE_AWS_LC_RS)
+endif ()
+
 add_executable(client client.c common.c)
 add_dependencies(client rustls-ffi)
 target_include_directories(client PUBLIC ${CMAKE_SOURCE_DIR}/src)
 IF (WIN32)
-    # TODO: Allow selecting all, or aws-lc-rs providers.
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D DEFINE_RING")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D ${CRYPTO_PROVIDER}")
     target_link_libraries(
             client
             debug "${CMAKE_SOURCE_DIR}/target/debug/rustls_ffi.lib"
@@ -32,8 +37,7 @@ add_executable(server server.c common.c)
 add_dependencies(server rustls-ffi)
 target_include_directories(server PUBLIC ${CMAKE_SOURCE_DIR}/src)
 IF (WIN32)
-    # TODO: Allow selecting all, or aws-lc-rs providers.
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D DEFINE_RING")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -D ${CRYPTO_PROVIDER}")
     target_link_libraries(
             server
             debug "${CMAKE_SOURCE_DIR}/target/debug/rustls_ffi.lib"
