@@ -8,10 +8,11 @@ if (NOT (CRYPTO_PROVIDER STREQUAL "ring" OR CRYPTO_PROVIDER STREQUAL "aws_lc_rs"
     message(FATAL_ERROR "Invalid crypto provider specified: ${CRYPTO_PROVIDER}. Must be 'ring' or 'aws_lc_rs'.")
 endif ()
 
+set(CARGO_FEATURES --no-default-features)
 if (CRYPTO_PROVIDER STREQUAL "ring")
-    set(CARGO_FEATURES --no-default-features --features=ring)
+    list(APPEND CARGO_FEATURES --features=ring)
 elseif (CRYPTO_PROVIDER STREQUAL "aws_lc_rs")
-    set(CARGO_FEATURES --no-default-features --features=aws_lc_rs)
+    list(APPEND CARGO_FEATURES --features=aws_lc_rs)
 endif ()
 
 add_subdirectory(tests)
