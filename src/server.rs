@@ -1,33 +1,32 @@
 use std::ffi::c_void;
 use std::fmt::{Debug, Formatter};
-use std::ptr::null;
 use std::slice;
 use std::sync::Arc;
 
 use libc::size_t;
-use rustls::crypto::ring::ALL_CIPHER_SUITES;
+use rustls::crypto::CryptoProvider;
 use rustls::server::danger::ClientCertVerifier;
 use rustls::server::{
     ClientHello, ResolvesServerCert, ServerConfig, ServerConnection, StoresServerSessions,
     WebPkiClientVerifier,
 };
 use rustls::sign::CertifiedKey;
-use rustls::{ProtocolVersion, SignatureScheme, WantsVerifier};
+use rustls::{ProtocolVersion, SignatureScheme, SupportedProtocolVersion};
 
-use crate::cipher::{
-    rustls_certified_key, rustls_client_cert_verifier, rustls_supported_ciphersuite,
-};
+use crate::cipher::{rustls_certified_key, rustls_client_cert_verifier};
 use crate::connection::{rustls_connection, Connection};
-use crate::error::rustls_result::{InvalidParameter, NullParameter};
+use crate::crypto_provider::rustls_crypto_provider;
+use crate::error::rustls_result::NullParameter;
 use crate::error::{map_error, rustls_result};
 use crate::rslice::{rustls_slice_bytes, rustls_slice_slice_bytes, rustls_slice_u16, rustls_str};
 use crate::session::{
     rustls_session_store_get_callback, rustls_session_store_put_callback, SessionStoreBroker,
 };
 use crate::{
-    arc_castable, box_castable, ffi_panic_boundary, free_arc, free_box, set_boxed_mut_ptr,
-    to_arc_const_ptr, to_boxed_mut_ptr, try_box_from_ptr, try_clone_arc, try_mut_from_ptr,
-    try_mut_from_ptr_ptr, try_ref_from_ptr, try_slice, userdata_get, Castable, OwnershipRef,
+    arc_castable, box_castable, ffi_panic_boundary, free_arc, free_box, set_arc_mut_ptr,
+    set_boxed_mut_ptr, to_boxed_mut_ptr, try_box_from_ptr, try_clone_arc, try_mut_from_ptr,
+    try_mut_from_ptr_ptr, try_ref_from_ptr, try_ref_from_ptr_ptr, try_slice, userdata_get,
+    Castable, OwnershipRef,
 };
 
 box_castable! {
@@ -41,7 +40,8 @@ box_castable! {
 }
 
 pub(crate) struct ServerConfigBuilder {
-    base: rustls::ConfigBuilder<ServerConfig, WantsVerifier>,
+    provider: Option<Arc<CryptoProvider>>,
+    versions: Vec<&'static SupportedProtocolVersion>,
     verifier: Arc<dyn ClientCertVerifier>,
     cert_resolver: Option<Arc<dyn ResolvesServerCert>>,
     session_storage: Option<Arc<dyn StoresServerSessions + Send + Sync>>,
@@ -57,22 +57,17 @@ arc_castable! {
 }
 
 impl rustls_server_config_builder {
-    /// Create a rustls_server_config_builder. Caller owns the memory and must
-    /// eventually call rustls_server_config_builder_build, then free the
-    /// resulting rustls_server_config. This uses rustls safe default values
-    /// for the cipher suites, key exchange groups and protocol versions.
+    /// Create a rustls_server_config_builder using the process default crypto provider.
+    /// Caller owns the memory and must eventually call rustls_server_config_builder_build,
+    /// then free the resulting rustls_server_config. This uses the process default provider's
+    /// values for the cipher suites and key exchange groups, as well as safe defaults for
+    /// protocol versions.
     #[no_mangle]
     pub extern "C" fn rustls_server_config_builder_new() -> *mut rustls_server_config_builder {
         ffi_panic_boundary! {
-            // Unwrap safety: *ring* default provider always has ciphersuites compatible with the
-            // default protocol versions.
-            let base = ServerConfig::builder_with_provider(
-                rustls::crypto::ring::default_provider().into(),
-            )
-            .with_safe_default_protocol_versions()
-            .unwrap();
             let builder = ServerConfigBuilder {
-                base,
+                provider: CryptoProvider::get_default().cloned(),
+                versions: vec![&rustls::version::TLS12, &rustls::version::TLS13],
                 verifier: WebPkiClientVerifier::no_client_auth(),
                 cert_resolver: None,
                 session_storage: None,
@@ -83,12 +78,10 @@ impl rustls_server_config_builder {
         }
     }
 
-    /// Create a rustls_server_config_builder. Caller owns the memory and must
-    /// eventually call rustls_server_config_builder_build, then free the
-    /// resulting rustls_server_config. Specify cipher suites in preference
-    /// order; the `cipher_suites` parameter must point to an array containing
-    /// `len` pointers to `rustls_supported_ciphersuite` previously obtained
-    /// from `rustls_all_ciphersuites_get_entry()`. Set the TLS protocol
+    /// Create a rustls_server_config_builder using the specified crypto provider. The
+    /// provider reference is cloned and the caller retains ownership.
+    /// Caller owns the memory and must eventually call rustls_server_config_builder_build,
+    /// then free the resulting rustls_server_config. Set the TLS protocol
     /// versions to use when negotiating a TLS session.
     ///
     /// `tls_version` is the version of the protocol, as defined in rfc8446,
@@ -99,26 +92,13 @@ impl rustls_server_config_builder {
     /// ownership. `len` is the number of consecutive `uint16_t` pointed to by `versions`.
     #[no_mangle]
     pub extern "C" fn rustls_server_config_builder_new_custom(
-        cipher_suites: *const *const rustls_supported_ciphersuite,
-        cipher_suites_len: size_t,
+        provider: *const rustls_crypto_provider,
         tls_versions: *const u16,
         tls_versions_len: size_t,
         builder_out: *mut *mut rustls_server_config_builder,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            if builder_out.is_null() {
-                return NullParameter;
-            }
-            let cipher_suites = try_slice!(cipher_suites, cipher_suites_len);
-            let mut cs_vec = Vec::new();
-            for &cs in cipher_suites.iter() {
-                let cs = try_ref_from_ptr!(cs);
-                match ALL_CIPHER_SUITES.iter().find(|&acs| cs.eq(acs)) {
-                    Some(scs) => cs_vec.push(*scs),
-                    None => return InvalidParameter,
-                }
-            }
-
+            let provider = try_clone_arc!(provider);
             let tls_versions = try_slice!(tls_versions, tls_versions_len);
             let mut versions = vec![];
             for version_number in tls_versions {
@@ -129,22 +109,11 @@ impl rustls_server_config_builder {
                     versions.push(&rustls::version::TLS13);
                 }
             }
-
             let builder_out = try_mut_from_ptr_ptr!(builder_out);
 
-            let provider = rustls::crypto::CryptoProvider {
-                cipher_suites: cs_vec,
-                ..rustls::crypto::ring::default_provider()
-            };
-            let result = rustls::ServerConfig::builder_with_provider(provider.into())
-                .with_protocol_versions(&versions);
-            let base = match result {
-                Ok(new) => new,
-                Err(_) => return rustls_result::InvalidParameter,
-            };
-
             let builder = ServerConfigBuilder {
-                base,
+                provider: Some(provider),
+                versions,
                 verifier: WebPkiClientVerifier::no_client_auth(),
                 cert_resolver: None,
                 session_storage: None,
@@ -264,14 +233,25 @@ impl rustls_server_config_builder {
     #[no_mangle]
     pub extern "C" fn rustls_server_config_builder_build(
         builder: *mut rustls_server_config_builder,
-    ) -> *const rustls_server_config {
+        config_out: *mut *const rustls_server_config,
+    ) -> rustls_result {
         ffi_panic_boundary! {
             let builder = try_box_from_ptr!(builder);
-            let base = builder.base.with_client_cert_verifier(builder.verifier);
+            let config_out = try_ref_from_ptr_ptr!(config_out);
+
+            let provider = match builder.provider {
+                Some(provider) => provider,
+                None => return rustls_result::NoDefaultCryptoProvider,
+            };
+
+            let base = ServerConfig::builder_with_provider(provider)
+                .with_protocol_versions(&builder.versions)
+                .unwrap()
+                .with_client_cert_verifier(builder.verifier);
             let mut config = if let Some(r) = builder.cert_resolver {
                 base.with_cert_resolver(r)
             } else {
-                return null();
+                return rustls_result::General;
             };
             if let Some(ss) = builder.session_storage {
                 config.session_storage = ss;
@@ -280,7 +260,9 @@ impl rustls_server_config_builder {
             if let Some(ignore_client_order) = builder.ignore_client_order {
                 config.ignore_client_order = ignore_client_order;
             }
-            to_arc_const_ptr(config)
+
+            set_arc_mut_ptr(config_out, config);
+            rustls_result::Ok
         }
     }
 }
@@ -646,12 +628,17 @@ impl rustls_server_config_builder {
 
 #[cfg(test)]
 mod tests {
+    use std::ptr::null;
     use std::ptr::null_mut;
+
+    use crate::crypto_provider::ensure_provider;
 
     use super::*;
 
     #[test]
     fn test_config_builder() {
+        ensure_provider();
+
         let builder = rustls_server_config_builder::rustls_server_config_builder_new();
         let h1 = "http/1.1".as_bytes();
         let h2 = "h2".as_bytes();
@@ -661,7 +648,33 @@ mod tests {
             alpn.as_ptr(),
             alpn.len(),
         );
-        let config = rustls_server_config_builder::rustls_server_config_builder_build(builder);
+
+        let cert_pem = include_str!("../testdata/localhost/cert.pem").as_bytes();
+        let key_pem = include_str!("../testdata/localhost/key.pem").as_bytes();
+        let mut certified_key = null();
+        let result = rustls_certified_key::rustls_certified_key_build(
+            cert_pem.as_ptr(),
+            cert_pem.len(),
+            key_pem.as_ptr(),
+            key_pem.len(),
+            &mut certified_key,
+        );
+        if !matches!(result, rustls_result::Ok) {
+            panic!(
+                "expected RUSTLS_RESULT_OK from rustls_certified_key_build, got {:?}",
+                result
+            );
+        }
+        rustls_server_config_builder::rustls_server_config_builder_set_certified_keys(
+            builder,
+            &certified_key,
+            1,
+        );
+
+        let mut config = null();
+        let result =
+            rustls_server_config_builder::rustls_server_config_builder_build(builder, &mut config);
+        assert_eq!(result, rustls_result::Ok);
         {
             let config2 = try_ref_from_ptr!(config);
             assert_eq!(config2.alpn_protocols, vec![h1, h2]);
@@ -672,17 +685,21 @@ mod tests {
     // Build a server connection and test the getters and initial values.
     #[test]
     fn test_server_config_builder_new_empty() {
+        ensure_provider();
         let builder = rustls_server_config_builder::rustls_server_config_builder_new();
-        // Building a config with no certificate and key configured results in null.
-        assert_eq!(
-            rustls_server_config_builder::rustls_server_config_builder_build(builder),
-            null()
-        );
+        // Building a config with no certificate and key configured results in an error.
+        let mut config = null();
+        let result =
+            rustls_server_config_builder::rustls_server_config_builder_build(builder, &mut config);
+        assert_eq!(result, rustls_result::General);
+        assert_eq!(config, null());
     }
 
     #[test]
     #[cfg_attr(miri, ignore)]
     fn test_server_connection_new() {
+        ensure_provider();
+
         let builder = rustls_server_config_builder::rustls_server_config_builder_new();
         let cert_pem = include_str!("../testdata/localhost/cert.pem").as_bytes();
         let key_pem = include_str!("../testdata/localhost/key.pem").as_bytes();
@@ -706,7 +723,10 @@ mod tests {
             1,
         );
 
-        let config = rustls_server_config_builder::rustls_server_config_builder_build(builder);
+        let mut config = null();
+        let result =
+            rustls_server_config_builder::rustls_server_config_builder_build(builder, &mut config);
+        assert_eq!(result, rustls_result::Ok);
         assert_ne!(config, null());
 
         let mut conn = null_mut();

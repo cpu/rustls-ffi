@@ -273,3 +273,12 @@ pub extern "C" fn rustls_supported_ciphersuites_free(
         free_arc(ciphersuites);
     }
 }
+
+#[cfg(test)]
+pub(crate) fn ensure_provider() {
+    if CryptoProvider::get_default().is_some() {
+        return;
+    }
+    // TODO(@cpu): Gate this based on crate features.
+    let _ = ring::default_provider().install_default();
+}
