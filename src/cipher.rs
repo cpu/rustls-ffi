@@ -1016,19 +1016,44 @@ box_castable! {
 
 impl rustls_server_cert_verifier {
     /// Create a new server certificate verifier that uses the system's root store and WebPKI via
-    /// [`rustls-platform-verifier`][].
+    /// [`rustls-platform-verifier`][] and the process default crypto provider.
     ///
     /// The verifier can be used in several `rustls_client_config` instances and must be freed by
     /// the application using `rustls_server_cert_verifier_free` when no longer needed.
     ///
     /// [`rustls-platform-verifier`]: https://github.com/rustls/rustls-platform-verifier
     #[no_mangle]
-    pub extern "C" fn rustls_platform_server_cert_verifier() -> *mut rustls_server_cert_verifier {
+    pub extern "C" fn rustls_platform_server_cert_verifier(
+        verifier_out: *mut *mut rustls_server_cert_verifier,
+    ) -> rustls_result {
         ffi_panic_boundary! {
-            let verifier: Arc<dyn ServerCertVerifier> = Arc::new(
-                rustls_platform_verifier::Verifier::new()
-                    .with_provider(rustls::crypto::ring::default_provider().into()),
-            );
+            let verifier_out = try_mut_from_ptr_ptr!(verifier_out);
+            let provider = match CryptoProvider::get_default().cloned() {
+                Some(provider) => provider,
+                None => return rustls_result::NoDefaultCryptoProvider,
+            };
+            let verifier: Arc<dyn ServerCertVerifier> =
+                Arc::new(rustls_platform_verifier::Verifier::new().with_provider(provider));
+            set_boxed_mut_ptr(verifier_out, verifier);
+            rustls_result::Ok
+        }
+    }
+
+    /// Create a new server certificate verifier that uses the system's root store and WebPKI via
+    /// [`rustls-platform-verifier`][] and the specified crypto provider.
+    ///
+    /// The verifier can be used in several `rustls_client_config` instances and must be freed by
+    /// the application using `rustls_server_cert_verifier_free` when no longer needed.
+    ///
+    /// [`rustls-platform-verifier`]: https://github.com/rustls/rustls-platform-verifier
+    #[no_mangle]
+    pub extern "C" fn rustls_platform_server_cert_verifier_with_provider(
+        provider: *const rustls_crypto_provider,
+    ) -> *mut rustls_server_cert_verifier {
+        ffi_panic_boundary! {
+            let provider = try_clone_arc!(provider);
+            let verifier: Arc<dyn ServerCertVerifier> =
+                Arc::new(rustls_platform_verifier::Verifier::new().with_provider(provider));
             to_boxed_mut_ptr(verifier)
         }
     }
