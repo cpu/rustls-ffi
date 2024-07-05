@@ -12,18 +12,19 @@ use rustls::client::danger::ServerCertVerifier;
 use rustls::client::WebPkiServerVerifier;
 use rustls::server::danger::ClientCertVerifier;
 use rustls::server::WebPkiClientVerifier;
-use rustls::sign::CertifiedKey;
+use rustls::sign::{CertifiedKey, SigningKey};
 use rustls::{DistinguishedName, RootCertStore, SupportedCipherSuite};
-use rustls_pemfile::{certs, crls, pkcs8_private_keys, rsa_private_keys};
+use rustls_pemfile::{certs, crls};
 use webpki::{RevocationCheckDepth, UnknownStatusPolicy};
 
+use crate::crypto_provider::rustls_signing_key;
 use crate::error::{self, rustls_result};
 use crate::rslice::{rustls_slice_bytes, rustls_str};
 use crate::{
     arc_castable, box_castable, ffi_panic_boundary, free_arc, free_box, ref_castable,
-    set_arc_mut_ptr, set_boxed_mut_ptr, to_arc_const_ptr, to_boxed_mut_ptr, try_clone_arc,
-    try_mut_from_ptr, try_mut_from_ptr_ptr, try_ref_from_ptr, try_ref_from_ptr_ptr, try_slice,
-    try_take,
+    set_arc_mut_ptr, set_boxed_mut_ptr, to_arc_const_ptr, to_boxed_mut_ptr, try_box_from_ptr,
+    try_clone_arc, try_mut_from_ptr, try_mut_from_ptr_ptr, try_ref_from_ptr, try_ref_from_ptr_ptr,
+    try_slice, try_take,
 };
 use rustls_result::{AlreadyUsed, NullParameter};
 
@@ -135,26 +136,27 @@ impl rustls_certified_key {
     pub extern "C" fn rustls_certified_key_build(
         cert_chain: *const u8,
         cert_chain_len: size_t,
-        private_key: *const u8,
-        private_key_len: size_t,
+        signing_key: *mut rustls_signing_key,
         certified_key_out: *mut *const rustls_certified_key,
     ) -> rustls_result {
         ffi_panic_boundary! {
+            let cert_chain = try_slice!(cert_chain, cert_chain_len);
+            let signing_key = try_box_from_ptr!(signing_key);
+
+            // TODO(XXX): use macro for this.
             let certified_key_out = unsafe {
                 match certified_key_out.as_mut() {
                     Some(c) => c,
                     None => return NullParameter,
                 }
             };
-            let certified_key = match rustls_certified_key::certified_key_build(
-                cert_chain,
-                cert_chain_len,
-                private_key,
-                private_key_len,
-            ) {
-                Ok(key) => Box::new(key),
-                Err(rr) => return rr,
-            };
+            let certified_key =
+                match rustls_certified_key::certified_key_build(cert_chain, *signing_key) {
+                    Ok(key) => Box::new(key),
+                    Err(rr) => return rr,
+                };
+
+            // TODO(XXX): use macro for this.
             let certified_key = Arc::into_raw(Arc::new(*certified_key)) as *const _;
             *certified_key_out = certified_key;
             rustls_result::Ok
@@ -225,45 +227,14 @@ impl rustls_certified_key {
     }
 
     fn certified_key_build(
-        cert_chain: *const u8,
-        cert_chain_len: size_t,
-        private_key: *const u8,
-        private_key_len: size_t,
+        mut cert_chain: &[u8],
+        signing_key: Arc<dyn SigningKey>,
     ) -> Result<CertifiedKey, rustls_result> {
-        let mut cert_chain = unsafe {
-            if cert_chain.is_null() {
-                return Err(NullParameter);
-            }
-            slice::from_raw_parts(cert_chain, cert_chain_len)
-        };
-        let private_key_der = unsafe {
-            if private_key.is_null() {
-                return Err(NullParameter);
-            }
-            slice::from_raw_parts(private_key, private_key_len)
-        };
-        let private_key = match pkcs8_private_keys(&mut Cursor::new(private_key_der)).next() {
-            Some(Ok(p)) => p.into(),
-            Some(Err(_)) => return Err(rustls_result::PrivateKeyParseError),
-            None => {
-                let rsa_private_key =
-                    match rsa_private_keys(&mut Cursor::new(private_key_der)).next() {
-                        Some(Ok(p)) => p.into(),
-                        _ => return Err(rustls_result::PrivateKeyParseError),
-                    };
-                rsa_private_key
-            }
-        };
-        let signing_key = match rustls::crypto::ring::sign::any_supported_type(&private_key) {
-            Ok(key) => key,
-            Err(_) => return Err(rustls_result::PrivateKeyParseError),
-        };
         let parsed_chain: Result<Vec<CertificateDer>, _> = certs(&mut cert_chain).collect();
         let parsed_chain = match parsed_chain {
             Ok(v) => v,
             Err(_) => return Err(rustls_result::CertificateParseError),
         };
-
         Ok(CertifiedKey::new(parsed_chain, signing_key))
     }
 }
