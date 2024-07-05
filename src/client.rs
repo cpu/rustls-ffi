@@ -244,6 +244,7 @@ struct Verifier {
 /// Safety: Verifier is Send because we don't allocate or deallocate any of its
 /// fields.
 unsafe impl Send for Verifier {}
+
 /// Safety: Verifier is Sync if the C code that passes us a callback that
 /// obeys the concurrency safety requirements documented in
 /// rustls_client_config_builder_dangerous_set_certificate_verifier.
@@ -643,8 +644,10 @@ mod tests {
 
         assert_eq!(
             rustls_connection::rustls_connection_get_negotiated_ciphersuite(conn),
-            null()
+            0
         );
+        let cs_name = rustls_connection::rustls_connection_get_negotiated_ciphersuite_name(conn);
+        assert_eq!(unsafe { cs_name.to_str() }, "");
         assert_eq!(
             rustls_connection::rustls_connection_get_peer_certificate(conn, 0),
             null()

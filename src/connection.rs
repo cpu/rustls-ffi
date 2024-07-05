@@ -4,16 +4,16 @@ use std::{ptr::null_mut, slice};
 
 use libc::{size_t, EINVAL, EIO};
 use pki_types::CertificateDer;
-use rustls::crypto::ring::ALL_CIPHER_SUITES;
-use rustls::{ClientConnection, ServerConnection, SupportedCipherSuite};
+use rustls::{ClientConnection, ServerConnection};
 
-use crate::cipher::{rustls_certificate, rustls_supported_ciphersuite};
+use crate::cipher::rustls_certificate;
 use crate::error::{map_error, rustls_io_result, rustls_result};
 use crate::io::{
     rustls_read_callback, rustls_write_callback, rustls_write_vectored_callback, CallbackReader,
     CallbackWriter, VectoredCallbackWriter,
 };
 use crate::log::{ensure_log_registered, rustls_log_callback};
+use crate::rslice::rustls_str;
 use crate::{
     box_castable, ffi_panic_boundary, free_box, try_callback, try_mut_from_ptr, try_ref_from_ptr,
     try_slice, userdata_push,
@@ -389,29 +389,37 @@ impl rustls_connection {
         }
     }
 
-    /// Retrieves the cipher suite agreed with the peer.
-    /// This returns NULL until the ciphersuite is agreed.
-    /// The returned pointer lives as long as the program.
+    /// Retrieves the cipher suite identifier agreed with the peer.
+    /// This returns 0 until the ciphersuite is agreed.
     /// <https://docs.rs/rustls/latest/rustls/enum.Connection.html#method.negotiated_cipher_suite>
     #[no_mangle]
     pub extern "C" fn rustls_connection_get_negotiated_ciphersuite(
         conn: *const rustls_connection,
-    ) -> *const rustls_supported_ciphersuite {
+    ) -> u16 {
         ffi_panic_boundary! {
-            let conn = try_ref_from_ptr!(conn);
-            let negotiated = match conn.negotiated_cipher_suite() {
-                Some(cs) => cs,
-                None => return null(),
-            };
-            for cs in ALL_CIPHER_SUITES {
-                // This type annotation is here to enforce the lifetime stated
-                // in the doccomment - that the returned pointer lives as long
-                // as the program.
-                if negotiated == *cs {
-                    return cs as *const SupportedCipherSuite as *const _;
-                }
+            match try_ref_from_ptr!(conn).negotiated_cipher_suite() {
+                Some(cs) => u16::from(cs.suite()),
+                None => 0,
             }
-            null()
+        }
+    }
+
+    /// Retrieves the cipher suite name agreed with the peer.
+    /// This returns "" until the ciphersuite is agreed.
+    /// <https://docs.rs/rustls/latest/rustls/enum.Connection.html#method.negotiated_cipher_suite>
+    #[no_mangle]
+    pub extern "C" fn rustls_connection_get_negotiated_ciphersuite_name(
+        conn: *const rustls_connection,
+    ) -> rustls_str<'static> {
+        ffi_panic_boundary! {
+            let cs_name = try_ref_from_ptr!(conn)
+                .negotiated_cipher_suite()
+                .and_then(|cs| cs.suite().as_str())
+                .and_then(|name| rustls_str::try_from(name).ok());
+            match cs_name {
+                Some(cs) => cs,
+                None => rustls_str::from_str_unchecked(""),
+            }
         }
     }
 
