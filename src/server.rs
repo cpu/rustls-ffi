@@ -631,13 +631,18 @@ mod tests {
     use std::ptr::null;
     use std::ptr::null_mut;
 
-    use crate::crypto_provider::ensure_provider;
+    use crate::crypto_provider::{
+        ensure_provider, rustls_crypto_provider_default, rustls_crypto_provider_load_key,
+    };
 
     use super::*;
 
     #[test]
     fn test_config_builder() {
         ensure_provider();
+
+        let provider = rustls_crypto_provider_default();
+        assert!(!provider.is_null());
 
         let builder = rustls_server_config_builder::rustls_server_config_builder_new();
         let h1 = "http/1.1".as_bytes();
@@ -651,12 +656,26 @@ mod tests {
 
         let cert_pem = include_str!("../testdata/localhost/cert.pem").as_bytes();
         let key_pem = include_str!("../testdata/localhost/key.pem").as_bytes();
+
+        let mut signing_key = null_mut();
+        let result = rustls_crypto_provider_load_key(
+            provider,
+            key_pem.as_ptr(),
+            key_pem.len(),
+            &mut signing_key,
+        );
+        if !matches!(result, rustls_result::Ok) {
+            panic!(
+                "expected RUSTLS_RESULT_OK from rustls_crypto_provider_load_key, got {:?}",
+                result
+            );
+        }
+
         let mut certified_key = null();
         let result = rustls_certified_key::rustls_certified_key_build(
             cert_pem.as_ptr(),
             cert_pem.len(),
-            key_pem.as_ptr(),
-            key_pem.len(),
+            signing_key,
             &mut certified_key,
         );
         if !matches!(result, rustls_result::Ok) {
@@ -700,15 +719,27 @@ mod tests {
     fn test_server_connection_new() {
         ensure_provider();
 
+        let provider = rustls_crypto_provider_default();
+        assert!(!provider.is_null());
+
         let builder = rustls_server_config_builder::rustls_server_config_builder_new();
         let cert_pem = include_str!("../testdata/localhost/cert.pem").as_bytes();
         let key_pem = include_str!("../testdata/localhost/key.pem").as_bytes();
+
+        let mut signing_key = null_mut();
+        let result = rustls_crypto_provider_load_key(
+            provider,
+            key_pem.as_ptr(),
+            key_pem.len(),
+            &mut signing_key,
+        );
+        assert_eq!(result, rustls_result::Ok);
+
         let mut certified_key = null();
         let result = rustls_certified_key::rustls_certified_key_build(
             cert_pem.as_ptr(),
             cert_pem.len(),
-            key_pem.as_ptr(),
-            key_pem.len(),
+            signing_key,
             &mut certified_key,
         );
         if !matches!(result, rustls_result::Ok) {
