@@ -1893,35 +1893,37 @@ size_t rustls_slice_str_len(const struct rustls_slice_str *input);
 struct rustls_str rustls_slice_str_get(const struct rustls_slice_str *input, size_t n);
 
 /**
- * Create a rustls_server_config_builder. Caller owns the memory and must
- * eventually call rustls_server_config_builder_build, then free the
- * resulting rustls_server_config. Alternatively, if an error occurs or,
- * you don't wish to build a config, call `rustls_server_config_builder_free`
- * to free the builder directly. This uses rustls safe default values
- * for the cipher suites, key exchange groups and protocol versions.
+ * Create a rustls_server_config_builder using the process default crypto provider.
+ *
+ * Caller owns the memory and must eventually call rustls_server_config_builder_build,
+ * then free the resulting rustls_server_config. Alternatively, if an error occurs or,
+ * you don't wish to build a config, call
+ * `rustls_server_config_builder_free` to free the builder directly.
+ *
+ * This uses the process default provider's values for the cipher suites and key exchange
+ * groups, as well as safe defaults for protocol versions.
  */
 struct rustls_server_config_builder *rustls_server_config_builder_new(void);
 
 /**
- * Create a rustls_server_config_builder. Caller owns the memory and must
- * eventually call rustls_server_config_builder_build, then free the
- * resulting rustls_server_config. Alternatively, if
- * an error occurs or, you don't wish to build a config, call
- * `rustls_server_config_builder_free` to free the builder directly. Specify
- * cipher suites in preference order; the `cipher_suites` parameter must
- * point to an array containing `len` pointers to `rustls_supported_ciphersuite`
- * previously obtained from `rustls_all_ciphersuites_get_entry()`.
- * Set the TLS protocol versions to use when negotiating a TLS session.
+ * Create a rustls_server_config_builder using the specified crypto provider. The
+ * provider reference is cloned and the caller retains ownership.
  *
- * `tls_version` is the version of the protocol, as defined in rfc8446,
- * ch. 4.2.1 and end of ch. 5.1. Some values are defined in
- * `rustls_tls_version` for convenience.
+ * Caller owns the memory and must eventually call rustls_server_config_builder_build,
+ * then free the resulting rustls_server_config. Alternatively, if an error occurs or,
+ * you don't wish to build a config, call
+ * `rustls_server_config_builder_free` to free the builder directly.
  *
- * `versions` will only be used during the call and the application retains
- * ownership. `len` is the number of consecutive `uint16_t` pointed to by `versions`.
+ * `tls_versions` sets the TLS protocol versions to use when negotiating a
+ * TLS session. The value is the version of the protocol, as defined in rfc8446,
+ * ch. 4.2.1 and end of ch. 5.1. Some values are defined in `rustls_tls_version`
+ * for convenience.
+ *
+ * `tls_versions` will only be used during the call and the application retains
+ * ownership. `tls_versions_len` is the number of consecutive `uint16_t` pointed
+ * to by `tls_versions`.
  */
-rustls_result rustls_server_config_builder_new_custom(const struct rustls_supported_ciphersuite *const *cipher_suites,
-                                                      size_t cipher_suites_len,
+rustls_result rustls_server_config_builder_new_custom(const struct rustls_crypto_provider *provider,
                                                       const uint16_t *tls_versions,
                                                       size_t tls_versions_len,
                                                       struct rustls_server_config_builder **builder_out);
@@ -1987,9 +1989,15 @@ rustls_result rustls_server_config_builder_set_certified_keys(struct rustls_serv
 
 /**
  * Turn a *rustls_server_config_builder (mutable) into a const *rustls_server_config
- * (read-only).
+ * (read-only). The constructed `rustls_server_config` will be written to the `config_out`
+ * pointer when this function returns `rustls_result::Ok`.
+ *
+ * This function may return an error if no process default crypto provider has been set
+ * and the builder was constructed using `rustls_server_config_builder_new`, or if no
+ * certificate resolver was set.
  */
-const struct rustls_server_config *rustls_server_config_builder_build(struct rustls_server_config_builder *builder);
+rustls_result rustls_server_config_builder_build(struct rustls_server_config_builder *builder,
+                                                 const struct rustls_server_config **config_out);
 
 /**
  * "Free" a rustls_server_config previously returned from
