@@ -13,7 +13,7 @@ use rustls::client::WebPkiServerVerifier;
 use rustls::crypto::CryptoProvider;
 use rustls::server::danger::ClientCertVerifier;
 use rustls::server::WebPkiClientVerifier;
-use rustls::sign::{CertifiedKey, SigningKey};
+use rustls::sign::CertifiedKey;
 use rustls::{DistinguishedName, RootCertStore, SupportedCipherSuite};
 use rustls_pemfile::{certs, crls};
 use webpki::{RevocationCheckDepth, UnknownStatusPolicy};
@@ -141,25 +141,19 @@ impl rustls_certified_key {
         certified_key_out: *mut *const rustls_certified_key,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            let cert_chain = try_slice!(cert_chain, cert_chain_len);
+            let mut cert_chain = try_slice!(cert_chain, cert_chain_len);
             let signing_key = try_box_from_ptr!(signing_key);
+            let certified_key_out = try_ref_from_ptr_ptr!(certified_key_out);
 
-            // TODO(XXX): use macro for this.
-            let certified_key_out = unsafe {
-                match certified_key_out.as_mut() {
-                    Some(c) => c,
-                    None => return NullParameter,
-                }
+            let parsed_chain = match certs(&mut cert_chain).collect::<Result<Vec<_>, _>>() {
+                Ok(v) => v,
+                Err(_) => return rustls_result::CertificateParseError,
             };
-            let certified_key =
-                match rustls_certified_key::certified_key_build(cert_chain, *signing_key) {
-                    Ok(key) => Box::new(key),
-                    Err(rr) => return rr,
-                };
 
-            // TODO(@cpu): use macro for this.
-            let certified_key = Arc::into_raw(Arc::new(*certified_key)) as *const _;
-            *certified_key_out = certified_key;
+            set_arc_mut_ptr(
+                certified_key_out,
+                CertifiedKey::new(parsed_chain, *signing_key),
+            );
             rustls_result::Ok
         }
     }
@@ -225,18 +219,6 @@ impl rustls_certified_key {
         ffi_panic_boundary! {
             free_arc(key);
         }
-    }
-
-    fn certified_key_build(
-        mut cert_chain: &[u8],
-        signing_key: Arc<dyn SigningKey>,
-    ) -> Result<CertifiedKey, rustls_result> {
-        let parsed_chain: Result<Vec<CertificateDer>, _> = certs(&mut cert_chain).collect();
-        let parsed_chain = match parsed_chain {
-            Ok(v) => v,
-            Err(_) => return Err(rustls_result::CertificateParseError),
-        };
-        Ok(CertifiedKey::new(parsed_chain, signing_key))
     }
 }
 
