@@ -278,8 +278,13 @@ main(int argc, const char **argv)
     goto cleanup;
   }
 
-  // TODO(@cpu): gate this based on #ifdef USE_RING once optional.
+#if defined(DEFINE_AWS_LC_RS)
+  default_provider = rustls_aws_lc_rs_crypto_provider();
+#elif defined(DEFINE_RING)
   default_provider = rustls_ring_crypto_provider();
+#else
+#warning "No supported crypto provider defined"
+#endif
 
   provider_builder =
     rustls_crypto_provider_builder_new_with_base(default_provider);
