@@ -960,8 +960,7 @@ struct rustls_str rustls_supported_ciphersuite_get_name(const struct rustls_supp
  */
 rustls_result rustls_certified_key_build(const uint8_t *cert_chain,
                                          size_t cert_chain_len,
-                                         const uint8_t *private_key,
-                                         size_t private_key_len,
+                                         struct rustls_signing_key *signing_key,
                                          const struct rustls_certified_key **certified_key_out);
 
 /**

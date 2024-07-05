@@ -130,7 +130,11 @@ void log_cb(void *userdata, const struct rustls_log_params *params);
 enum demo_result read_file(const char *filename, char *buf, size_t buflen,
                            size_t *n);
 
-const struct rustls_certified_key *load_cert_and_key(const char *certfile,
-                                                     const char *keyfile);
+const struct rustls_certified_key *load_cert_and_key(
+  const rustls_crypto_provider *provider, const char *certfile,
+  const char *keyfile);
+
+struct rustls_signing_key *load_signing_key(
+  const rustls_crypto_provider *provider, const char *keyfile);
 
 #endif /* COMMON_H */

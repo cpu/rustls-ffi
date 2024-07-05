@@ -295,7 +295,7 @@ main(int argc, const char **argv)
     goto cleanup;
   }
 
-  certified_key = load_cert_and_key(argv[1], argv[2]);
+  certified_key = load_cert_and_key(default_provider, argv[1], argv[2]);
   if(certified_key == NULL) {
     goto cleanup;
   }
