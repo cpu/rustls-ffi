@@ -10,6 +10,7 @@ use std::sync::Arc;
 use pki_types::{CertificateDer, CertificateRevocationListDer};
 use rustls::client::danger::ServerCertVerifier;
 use rustls::client::WebPkiServerVerifier;
+use rustls::crypto::CryptoProvider;
 use rustls::server::danger::ClientCertVerifier;
 use rustls::server::WebPkiClientVerifier;
 use rustls::sign::CertifiedKey;
@@ -17,7 +18,7 @@ use rustls::{DistinguishedName, RootCertStore, SupportedCipherSuite};
 use rustls_pemfile::{certs, crls};
 use webpki::{RevocationCheckDepth, UnknownStatusPolicy};
 
-use crate::crypto_provider::rustls_signing_key;
+use crate::crypto_provider::{rustls_crypto_provider, rustls_signing_key};
 use crate::error::{self, map_error, rustls_result};
 use crate::rslice::{rustls_slice_bytes, rustls_str};
 use crate::{
@@ -504,6 +505,7 @@ impl rustls_client_cert_verifier {
 }
 
 pub(crate) struct ClientCertVerifierBuilder {
+    provider: Option<Arc<CryptoProvider>>,
     roots: Arc<RootCertStore>,
     root_hint_subjects: Vec<DistinguishedName>,
     crls: Vec<CertificateRevocationListDer<'static>>,
@@ -525,8 +527,9 @@ box_castable! {
 }
 
 impl rustls_web_pki_client_cert_verifier_builder {
-    /// Create a `rustls_web_pki_client_cert_verifier_builder`. Caller owns the memory and may
-    /// eventually call `rustls_web_pki_client_cert_verifier_builder_free` to free it, whether or
+    /// Create a `rustls_web_pki_client_cert_verifier_builder` using the process-wide default
+    /// cryptography provider. Caller owns the memory and may eventually call
+    /// `rustls_web_pki_client_cert_verifier_builder_free` to free it, whether or
     /// not `rustls_web_pki_client_cert_verifier_builder_build` was called.
     ///
     /// Without further modification the builder will produce a client certificate verifier that
@@ -553,15 +556,58 @@ impl rustls_web_pki_client_cert_verifier_builder {
     ) -> *mut rustls_web_pki_client_cert_verifier_builder {
         ffi_panic_boundary! {
             let store = try_clone_arc!(store);
-            let builder = ClientCertVerifierBuilder {
+            to_boxed_mut_ptr(Some(ClientCertVerifierBuilder {
+                provider: crypto_provider::get_default_or_install_from_crate_features(),
                 root_hint_subjects: store.subjects(),
                 roots: store,
                 crls: Vec::default(),
                 revocation_depth: RevocationCheckDepth::Chain,
                 revocation_policy: UnknownStatusPolicy::Deny,
                 allow_unauthenticated: false,
-            };
-            to_boxed_mut_ptr(Some(builder))
+            }))
+        }
+    }
+
+    /// Create a `rustls_web_pki_client_cert_verifier_builder` using the specified
+    /// cryptography provider. Caller owns the memory and may eventually call
+    /// `rustls_web_pki_client_cert_verifier_builder_free` to free it, whether or
+    /// not `rustls_web_pki_client_cert_verifier_builder_build` was called.
+    ///
+    /// Without further modification the builder will produce a client certificate verifier that
+    /// will require a client present a client certificate that chains to one of the trust anchors
+    /// in the provided `rustls_root_cert_store`. The root cert store must not be empty.
+    ///
+    /// Revocation checking will not be performed unless
+    /// `rustls_web_pki_client_cert_verifier_builder_add_crl` is used to add certificate revocation
+    /// lists (CRLs) to the builder. If CRLs are added, revocation checking will be performed
+    /// for the entire certificate chain unless
+    /// `rustls_web_pki_client_cert_verifier_only_check_end_entity_revocation` is used. Unknown
+    /// revocation status for certificates considered for revocation status will be treated as
+    /// an error unless `rustls_web_pki_client_cert_verifier_allow_unknown_revocation_status` is
+    /// used.
+    ///
+    /// Unauthenticated clients will not be permitted unless
+    /// `rustls_web_pki_client_cert_verifier_builder_allow_unauthenticated` is used.
+    ///
+    /// This copies the contents of the `rustls_root_cert_store`. It does not take
+    /// ownership of the pointed-to data.
+    #[no_mangle]
+    pub extern "C" fn rustls_web_pki_client_cert_verifier_builder_new_with_provider(
+        provider: *const rustls_crypto_provider,
+        store: *const rustls_root_cert_store,
+    ) -> *mut rustls_web_pki_client_cert_verifier_builder {
+        ffi_panic_boundary! {
+            let provider = try_clone_arc!(provider);
+            let store = try_clone_arc!(store);
+            to_boxed_mut_ptr(Some(ClientCertVerifierBuilder {
+                provider: Some(provider),
+                root_hint_subjects: store.subjects(),
+                roots: store,
+                crls: Vec::default(),
+                revocation_depth: RevocationCheckDepth::Chain,
+                revocation_policy: UnknownStatusPolicy::Deny,
+                allow_unauthenticated: false,
+            }))
         }
     }
 
@@ -718,18 +764,19 @@ impl rustls_web_pki_client_cert_verifier_builder {
         verifier_out: *mut *mut rustls_client_cert_verifier,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            if verifier_out.is_null() {
-                return NullParameter;
-            }
             let client_verifier_builder = try_mut_from_ptr!(builder);
             let client_verifier_builder = try_take!(client_verifier_builder);
             let verifier_out = try_mut_from_ptr_ptr!(verifier_out);
 
-            let mut builder = WebPkiClientVerifier::builder_with_provider(
-                client_verifier_builder.roots,
-                rustls::crypto::ring::default_provider().into(),
-            )
-            .with_crls(client_verifier_builder.crls);
+            let builder = match client_verifier_builder.provider {
+                Some(provider) => WebPkiClientVerifier::builder_with_provider(
+                    client_verifier_builder.roots,
+                    provider,
+                ),
+                None => WebPkiClientVerifier::builder(client_verifier_builder.roots),
+            };
+
+            let mut builder = builder.with_crls(client_verifier_builder.crls);
             match client_verifier_builder.revocation_depth {
                 RevocationCheckDepth::EndEntity => {
                     builder = builder.only_check_end_entity_revocation()
@@ -786,6 +833,7 @@ box_castable! {
 }
 
 pub(crate) struct ServerCertVerifierBuilder {
+    provider: Option<Arc<CryptoProvider>>,
     roots: Arc<RootCertStore>,
     crls: Vec<CertificateRevocationListDer<'static>>,
     revocation_depth: RevocationCheckDepth,
@@ -793,8 +841,9 @@ pub(crate) struct ServerCertVerifierBuilder {
 }
 
 impl ServerCertVerifierBuilder {
-    /// Create a `rustls_web_pki_server_cert_verifier_builder`. Caller owns the memory and may
-    /// free it with `rustls_web_pki_server_cert_verifier_builder_free`, regardless of whether
+    /// Create a `rustls_web_pki_server_cert_verifier_builder` using the process-wide default
+    /// crypto provider. Caller owns the memory and may free it with
+    /// `rustls_web_pki_server_cert_verifier_builder_free`, regardless of whether
     /// `rustls_web_pki_server_cert_verifier_builder_build` was called.
     ///
     /// Without further modification the builder will produce a server certificate verifier that
@@ -818,13 +867,51 @@ impl ServerCertVerifierBuilder {
     ) -> *mut rustls_web_pki_server_cert_verifier_builder {
         ffi_panic_boundary! {
             let store = try_clone_arc!(store);
-            let builder = ServerCertVerifierBuilder {
+            to_boxed_mut_ptr(Some(ServerCertVerifierBuilder {
+                provider: crypto_provider::get_default_or_install_from_crate_features(),
                 roots: store,
                 crls: Vec::default(),
                 revocation_depth: RevocationCheckDepth::Chain,
                 revocation_policy: UnknownStatusPolicy::Deny,
-            };
-            to_boxed_mut_ptr(Some(builder))
+            }))
+        }
+    }
+
+    /// Create a `rustls_web_pki_server_cert_verifier_builder` using the specified
+    /// crypto provider. Caller owns the memory and may free it with
+    /// `rustls_web_pki_server_cert_verifier_builder_free`, regardless of whether
+    /// `rustls_web_pki_server_cert_verifier_builder_build` was called.
+    ///
+    /// Without further modification the builder will produce a server certificate verifier that
+    /// will require a server present a certificate that chains to one of the trust anchors
+    /// in the provided `rustls_root_cert_store`. The root cert store must not be empty.
+    ///
+    /// Revocation checking will not be performed unless
+    /// `rustls_web_pki_server_cert_verifier_builder_add_crl` is used to add certificate revocation
+    /// lists (CRLs) to the builder.  If CRLs are added, revocation checking will be performed
+    /// for the entire certificate chain unless
+    /// `rustls_web_pki_server_cert_verifier_only_check_end_entity_revocation` is used. Unknown
+    /// revocation status for certificates considered for revocation status will be treated as
+    /// an error unless `rustls_web_pki_server_cert_verifier_allow_unknown_revocation_status` is
+    /// used.
+    ///
+    /// This copies the contents of the `rustls_root_cert_store`. It does not take
+    /// ownership of the pointed-to data.
+    #[no_mangle]
+    pub extern "C" fn rustls_web_pki_server_cert_verifier_builder_new_with_provider(
+        provider: *const rustls_crypto_provider,
+        store: *const rustls_root_cert_store,
+    ) -> *mut rustls_web_pki_server_cert_verifier_builder {
+        ffi_panic_boundary! {
+            let provider = try_clone_arc!(provider);
+            let store = try_clone_arc!(store);
+            to_boxed_mut_ptr(Some(ServerCertVerifierBuilder {
+                provider: Some(provider),
+                roots: store,
+                crls: Vec::default(),
+                revocation_depth: RevocationCheckDepth::Chain,
+                revocation_policy: UnknownStatusPolicy::Deny,
+            }))
         }
     }
 
@@ -919,18 +1006,19 @@ impl ServerCertVerifierBuilder {
         verifier_out: *mut *mut rustls_server_cert_verifier,
     ) -> rustls_result {
         ffi_panic_boundary! {
-            if verifier_out.is_null() {
-                return NullParameter;
-            }
             let server_verifier_builder = try_mut_from_ptr!(builder);
             let server_verifier_builder = try_take!(server_verifier_builder);
             let verifier_out = try_mut_from_ptr_ptr!(verifier_out);
 
-            let mut builder = WebPkiServerVerifier::builder_with_provider(
-                server_verifier_builder.roots,
-                rustls::crypto::ring::default_provider().into(),
-            )
-            .with_crls(server_verifier_builder.crls);
+            let builder = match server_verifier_builder.provider {
+                Some(provider) => WebPkiServerVerifier::builder_with_provider(
+                    server_verifier_builder.roots,
+                    provider,
+                ),
+                None => WebPkiServerVerifier::builder(server_verifier_builder.roots),
+            };
+
+            let mut builder = builder.with_crls(server_verifier_builder.crls);
             match server_verifier_builder.revocation_depth {
                 RevocationCheckDepth::EndEntity => {
                     builder = builder.only_check_end_entity_revocation()
