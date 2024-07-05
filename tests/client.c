@@ -420,8 +420,9 @@ main(int argc, const char **argv)
   /* Set this global variable for logging purposes. */
   programname = "client";
 
-  struct rustls_client_config_builder *config_builder =
-    rustls_client_config_builder_new();
+  const struct rustls_crypto_provider *default_provider = NULL;
+  struct rustls_crypto_provider_builder *provider_builder = NULL;
+  struct rustls_client_config_builder *config_builder = NULL;
   struct rustls_root_cert_store_builder *server_cert_root_store_builder = NULL;
   const struct rustls_root_cert_store *server_cert_root_store = NULL;
   const struct rustls_client_config *client_config = NULL;
@@ -440,6 +441,23 @@ main(int argc, const char **argv)
   setmode(STDOUT_FILENO, O_BINARY);
 #endif
 
+  // TODO(@cpu): gate this based on #ifdef USE_RING once optional.
+  default_provider = rustls_ring_crypto_provider();
+
+  provider_builder =
+    rustls_crypto_provider_builder_new_with_base(default_provider);
+  if(provider_builder == NULL) {
+    fprintf(stderr, "client: failed to create crypto provider builder\n");
+    goto cleanup;
+  }
+
+  result = rustls_crypto_provider_builder_build_as_default(provider_builder);
+  if(result != RUSTLS_RESULT_OK) {
+    fprintf(stderr, "client: failed to set default crypto provider\n");
+    goto cleanup;
+  }
+
+  config_builder = rustls_client_config_builder_new();
   if(getenv("RUSTLS_PLATFORM_VERIFIER")) {
     server_cert_verifier = rustls_platform_server_cert_verifier();
     if(server_cert_verifier == NULL) {
@@ -503,7 +521,11 @@ main(int argc, const char **argv)
   rustls_client_config_builder_set_alpn_protocols(
     config_builder, &alpn_http11, 1);
 
-  client_config = rustls_client_config_builder_build(config_builder);
+  result = rustls_client_config_builder_build(config_builder, &client_config);
+  if(result != RUSTLS_RESULT_OK) {
+    print_error("building client config", result);
+    goto cleanup;
+  }
 
   int i;
   for(i = 0; i < 3; i++) {
@@ -524,6 +546,8 @@ cleanup:
   rustls_server_cert_verifier_free(server_cert_verifier);
   rustls_certified_key_free(certified_key);
   rustls_client_config_free(client_config);
+  rustls_crypto_provider_free(default_provider);
+  rustls_crypto_provider_builder_free(provider_builder);
 
 #ifdef _WIN32
   WSACleanup();

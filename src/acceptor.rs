@@ -615,6 +615,8 @@ mod tests {
 
     // Generate the bytes of a ClientHello for example.com. Helper function.
     fn client_hello_bytes() -> VecDeque<u8> {
+        ensure_provider();
+
         type ccb = rustls_client_config_builder;
         type conn = rustls_connection;
         let builder = ccb::rustls_client_config_builder_new();
@@ -629,7 +631,10 @@ mod tests {
             protocols_slices.len(),
         );
 
-        let config = ccb::rustls_client_config_builder_build(builder);
+        let mut config = null();
+        let result = ccb::rustls_client_config_builder_build(builder, &mut config);
+        assert_eq!(result, rustls_result::Ok);
+        assert!(!config.is_null());
         let mut client_conn = null_mut();
         let result = rustls_client_config::rustls_client_connection_new(
             config,
