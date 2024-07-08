@@ -244,6 +244,7 @@ main(int argc, const char **argv)
   int sockfd = 0;
   const struct rustls_crypto_provider *default_provider = NULL;
   struct rustls_crypto_provider_builder *provider_builder = NULL;
+  const struct rustls_supported_ciphersuite *custom_ciphersuite = NULL;
   struct rustls_server_config_builder *config_builder = NULL;
   const struct rustls_server_config *server_config = NULL;
   struct rustls_connection *rconn = NULL;
@@ -291,6 +292,16 @@ main(int argc, const char **argv)
   if(provider_builder == NULL) {
     fprintf(stderr, "server: failed to create crypto provider builder\n");
     goto cleanup;
+  }
+
+  const char *custom_ciphersuite_name = getenv("RUSTLS_CIPHERSUITE");
+  if(custom_ciphersuite_name != NULL) {
+    custom_ciphersuite = set_provider_builder_ciphersuite(
+      default_provider, provider_builder, custom_ciphersuite_name);
+    if(custom_ciphersuite == NULL) {
+      goto cleanup;
+    }
+    printf("selected ciphersuite: %p\n", (void *)custom_ciphersuite);
   }
 
   rustls_result result =
