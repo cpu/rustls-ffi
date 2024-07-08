@@ -402,3 +402,61 @@ load_signing_key(const rustls_crypto_provider *provider, const char *keyfile)
   }
   return signing_key;
 }
+
+const struct rustls_supported_ciphersuite *
+set_provider_builder_ciphersuite(
+  const rustls_crypto_provider *default_provider,
+  rustls_crypto_provider_builder *provider_builder,
+  const char *custom_ciphersuite_name)
+{
+  const struct rustls_supported_ciphersuite *custom_ciphersuite = NULL;
+  const struct rustls_supported_ciphersuites *default_supported = NULL;
+
+  default_supported = rustls_crypto_provider_ciphersuites(default_provider);
+  if(default_supported == NULL) {
+    fprintf(stderr,
+            "failed to get supported ciphersuites from default "
+            "provider\n");
+    goto cleanup;
+  }
+  size_t num_supported = rustls_supported_ciphersuites_len(default_supported);
+  for(size_t i = 0; i < num_supported; i++) {
+    const struct rustls_supported_ciphersuite *suite =
+      rustls_supported_ciphersuites_get(default_supported, i);
+    if(suite == NULL) {
+      fprintf(stderr, "failed to get ciphersuite %zu\n", i);
+      goto cleanup;
+    }
+
+    const rustls_str suite_name = rustls_supported_ciphersuite_get_name(suite);
+#if 1
+    fprintf(stderr,
+            "considering ciphersuite %.*s\n",
+            (int)suite_name.len,
+            suite_name.data);
+#endif
+    if(strncmp(suite_name.data, custom_ciphersuite_name, suite_name.len) ==
+       0) {
+      custom_ciphersuite = suite;
+      break;
+    }
+  }
+
+  if(custom_ciphersuite == NULL) {
+    fprintf(stderr,
+            "failed to select custom ciphersuite: %s\n",
+            custom_ciphersuite_name);
+    goto cleanup;
+  }
+
+  rustls_result result = rustls_crypto_provider_builder_set_cipher_suites(
+    provider_builder, &custom_ciphersuite, 1);
+  if(result != RUSTLS_RESULT_OK) {
+    fprintf(stderr, "failed to set custom ciphersuite\n");
+    goto cleanup;
+  }
+
+cleanup:
+  rustls_supported_ciphersuites_free(default_supported);
+  return custom_ciphersuite;
+}

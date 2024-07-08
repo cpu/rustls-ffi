@@ -137,4 +137,9 @@ const struct rustls_certified_key *load_cert_and_key(
 struct rustls_signing_key *load_signing_key(
   const rustls_crypto_provider *provider, const char *keyfile);
 
+const struct rustls_supported_ciphersuite *set_provider_builder_ciphersuite(
+  const rustls_crypto_provider *default_provider,
+  rustls_crypto_provider_builder *provider_builder,
+  const char *custom_ciphersuite_name);
+
 #endif /* COMMON_H */
