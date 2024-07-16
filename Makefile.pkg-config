@@ -49,7 +49,7 @@ target/%.o: tests/%.c tests/common.h | target
 	$(CC) -o $@ -c $< $(CFLAGS) $(shell pkg-config --cflags rustls)
 
 target/client: target/client.o target/common.o
-	$(CC) -o $@ $^ $(LDFLAGS) $(shell pkg-config --libs rustls)
+	$(CC) -o $@ $^ $(LDFLAGS) $(shell pkg-config --libs rustls) $(shell pkg-config --libs rustls-post-quantum-ffi)
 
 target/server: target/server.o target/common.o
 	$(CC) -o $@ $^ $(LDFLAGS) $(shell pkg-config --libs rustls)
