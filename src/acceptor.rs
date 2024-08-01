@@ -507,7 +507,7 @@ mod tests {
     use rustls::internal::msgs::enums::AlertLevel;
     use rustls::{AlertDescription, ContentType, ProtocolVersion, SignatureScheme};
 
-    use crate::cipher::rustls_certified_key;
+    use crate::cipher::{rustls_certified_key, rustls_server_cert_verifier};
     use crate::client::{rustls_client_config, rustls_client_config_builder};
     use crate::crypto_provider::{
         ensure_provider, rustls_crypto_provider_default, rustls_crypto_provider_load_key,
@@ -633,6 +633,14 @@ mod tests {
             protocols_slices.len(),
         );
 
+        let mut verifier = null_mut();
+        let result =
+            rustls_server_cert_verifier::rustls_platform_server_cert_verifier(&mut verifier);
+        assert_eq!(result, rustls_result::Ok);
+        rustls_client_config_builder::rustls_client_config_builder_set_server_verifier(
+            builder, verifier,
+        );
+
         let mut config = null();
         let result = ccb::rustls_client_config_builder_build(builder, &mut config);
         assert_eq!(result, rustls_result::Ok);
@@ -657,6 +665,7 @@ mod tests {
 
         rustls_connection::rustls_connection_free(client_conn);
         rustls_client_config::rustls_client_config_free(config);
+        rustls_server_cert_verifier::rustls_server_cert_verifier_free(verifier);
         buf
     }
 

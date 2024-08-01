@@ -9,8 +9,8 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 use rustls::client::ResolvesClientCert;
 use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
 use rustls::{
-    sign::CertifiedKey, CertificateError, ClientConfig, ClientConnection, DigitallySignedStruct,
-    Error, ProtocolVersion, SignatureScheme, SupportedProtocolVersion,
+    sign::CertifiedKey, ClientConfig, ClientConnection, DigitallySignedStruct, Error,
+    ProtocolVersion, SignatureScheme, SupportedProtocolVersion,
 };
 
 use crate::cipher::{rustls_certified_key, rustls_server_cert_verifier};
@@ -55,44 +55,6 @@ arc_castable! {
     /// Under the hood, this object corresponds to an `Arc<ClientConfig>`.
     /// <https://docs.rs/rustls/latest/rustls/struct.ClientConfig.html>
     pub struct rustls_client_config(ClientConfig);
-}
-
-#[derive(Debug)]
-struct NoneVerifier(Arc<CryptoProvider>);
-
-impl ServerCertVerifier for NoneVerifier {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &CertificateDer,
-        _intermediates: &[CertificateDer],
-        _server_name: &pki_types::ServerName<'_>,
-        _ocsp_response: &[u8],
-        _now: UnixTime,
-    ) -> Result<ServerCertVerified, Error> {
-        Err(Error::InvalidCertificate(CertificateError::UnknownIssuer))
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        _message: &[u8],
-        _cert: &CertificateDer,
-        _dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, Error> {
-        Err(Error::InvalidCertificate(CertificateError::BadSignature))
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        _message: &[u8],
-        _cert: &CertificateDer,
-        _dss: &DigitallySignedStruct,
-    ) -> Result<HandshakeSignatureValid, Error> {
-        Err(Error::InvalidCertificate(CertificateError::BadSignature))
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
-        self.0.signature_verification_algorithms.supported_schemes()
-    }
 }
 
 impl rustls_client_config_builder {
@@ -495,7 +457,7 @@ impl rustls_client_config_builder {
 
             let verifier = match builder.verifier {
                 Some(v) => v,
-                None => Arc::new(NoneVerifier(provider.clone())),
+                None => return rustls_result::NoServerCertVerifier,
             };
 
             let config = match ClientConfig::builder_with_provider(provider)
@@ -616,6 +578,13 @@ mod tests {
             alpn.len(),
         );
         rustls_client_config_builder::rustls_client_config_builder_set_enable_sni(builder, false);
+        let mut verifier = null_mut();
+        let result =
+            rustls_server_cert_verifier::rustls_platform_server_cert_verifier(&mut verifier);
+        assert_eq!(result, rustls_result::Ok);
+        rustls_client_config_builder::rustls_client_config_builder_set_server_verifier(
+            builder, verifier,
+        );
         let mut config = null();
         let result =
             rustls_client_config_builder::rustls_client_config_builder_build(builder, &mut config);
@@ -626,7 +595,8 @@ mod tests {
             assert!(!config2.enable_sni);
             assert_eq!(config2.alpn_protocols, vec![h1, h2]);
         }
-        rustls_client_config::rustls_client_config_free(config)
+        rustls_client_config::rustls_client_config_free(config);
+        rustls_server_cert_verifier::rustls_server_cert_verifier_free(verifier);
     }
 
     // Build a client connection and test the getters and initial values.
@@ -636,6 +606,13 @@ mod tests {
         ensure_provider();
 
         let builder = rustls_client_config_builder::rustls_client_config_builder_new();
+        let mut verifier = null_mut();
+        let result =
+            rustls_server_cert_verifier::rustls_platform_server_cert_verifier(&mut verifier);
+        assert_eq!(result, rustls_result::Ok);
+        rustls_client_config_builder::rustls_client_config_builder_set_server_verifier(
+            builder, verifier,
+        );
         let mut config = null();
         let result =
             rustls_client_config_builder::rustls_client_config_builder_build(builder, &mut config);
@@ -681,6 +658,7 @@ mod tests {
             0
         );
         rustls_connection::rustls_connection_free(conn);
+        rustls_server_cert_verifier::rustls_server_cert_verifier_free(verifier);
     }
 
     #[test]
@@ -689,6 +667,13 @@ mod tests {
         ensure_provider();
 
         let builder = rustls_client_config_builder::rustls_client_config_builder_new();
+        let mut verifier = null_mut();
+        let result =
+            rustls_server_cert_verifier::rustls_platform_server_cert_verifier(&mut verifier);
+        assert_eq!(result, rustls_result::Ok);
+        rustls_client_config_builder::rustls_client_config_builder_set_server_verifier(
+            builder, verifier,
+        );
         let mut config = null();
         let result =
             rustls_client_config_builder::rustls_client_config_builder_build(builder, &mut config);
@@ -703,5 +688,17 @@ mod tests {
         if !matches!(result, rustls_result::Ok) {
             panic!("expected RUSTLS_RESULT_OK, got {:?}", result);
         }
+        rustls_server_cert_verifier::rustls_server_cert_verifier_free(verifier);
+    }
+
+    #[test]
+    fn test_client_builder_no_verifier_err() {
+        ensure_provider();
+
+        let builder = rustls_client_config_builder::rustls_client_config_builder_new();
+        let mut config = null();
+        let result =
+            rustls_client_config_builder::rustls_client_config_builder_build(builder, &mut config);
+        assert_eq!(result, rustls_result::NoServerCertVerifier);
     }
 }
