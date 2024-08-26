@@ -5,6 +5,7 @@ use libc::{c_void, size_t};
 use crate::error::rustls_io_result;
 
 /// A callback for rustls_connection_read_tls.
+///
 /// An implementation of this callback should attempt to read up to n bytes from the
 /// network, storing them in `buf`. If any bytes were stored, the implementation should
 /// set out_n to the number of bytes stored and return 0. If there was an error,
@@ -50,6 +51,7 @@ impl Read for CallbackReader {
 }
 
 /// A callback for rustls_connection_write_tls or rustls_accepted_alert_write_tls.
+///
 /// An implementation of this callback should attempt to write the `n` bytes in buf
 /// to the network. If any bytes were written, the implementation should
 /// set out_n to the number of bytes stored and return 0. If there was an error,
@@ -98,15 +100,17 @@ impl Write for CallbackWriter {
     }
 }
 
-/// An alias for `struct iovec` from uio.h (on Unix) or `WSABUF` on Windows. You should cast
-/// `const struct rustls_iovec *` to `const struct iovec *` on Unix, or `const *LPWSABUF`
-/// on Windows. See [`std::io::IoSlice`] for details on interoperability with platform
-/// specific vectored IO.
+/// An alias for `struct iovec` from uio.h (on Unix) or `WSABUF` on Windows.
+///
+/// You should cast `const struct rustls_iovec *` to `const struct iovec *` on Unix,
+/// or `const *LPWSABUF` on Windows. See [`std::io::IoSlice`] for details on interoperability
+/// with platform specific vectored IO.
 pub struct rustls_iovec {
     _private: [u8; 0],
 }
 
 /// A callback for rustls_connection_write_tls_vectored.
+///
 /// An implementation of this callback should attempt to write the bytes in
 /// the given `count` iovecs to the network. If any bytes were written,
 /// the implementation should set out_n to the number of bytes written and return 0.

@@ -13,10 +13,11 @@ use crate::{
 };
 
 box_castable! {
-    /// A buffer and parser for ClientHello bytes. This allows reading ClientHello
-    /// before choosing a rustls_server_config. It's useful when the server
-    /// config will be based on parameters in the ClientHello: server name
-    /// indication (SNI), ALPN protocols, signature schemes, and cipher suites. In
+    /// A buffer and parser for ClientHello bytes.
+    ///
+    /// This allows reading ClientHello before choosing a rustls_server_config.
+    /// It's useful when the server config will be based on parameters in the ClientHello: server
+    /// name indication (SNI), ALPN protocols, signature schemes, and cipher suites. In
     /// particular, if a server wants to do some potentially expensive work to load a
     /// certificate for a given hostname, rustls_acceptor allows doing that asynchronously,
     /// as opposed to rustls_server_config_builder_set_hello_callback(), which doesn't
@@ -39,8 +40,9 @@ box_castable! {
 }
 
 box_castable! {
-    /// A parsed ClientHello produced by a rustls_acceptor. It is used to check
-    /// server name indication (SNI), ALPN protocols, signature schemes, and
+    /// A parsed ClientHello produced by a rustls_acceptor.
+    ///
+    /// It is used to check server name indication (SNI), ALPN protocols, signature schemes, and
     /// cipher suites. It can be combined with a rustls_server_config to build a
     /// rustls_connection.
     pub struct rustls_accepted(Option<Accepted>);

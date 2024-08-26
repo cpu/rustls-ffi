@@ -82,8 +82,9 @@ impl rustls_supported_ciphersuite {
     }
 }
 
-/// Returns the name of the ciphersuite as a `rustls_str`. If the provided
-/// ciphersuite is invalid, the rustls_str will contain the empty string. The
+/// Returns the name of the ciphersuite as a `rustls_str`.
+///
+/// If the provided ciphersuite is invalid, the rustls_str will contain the empty string. The
 /// lifetime of the `rustls_str` is the lifetime of the program, it does not
 /// need to be freed.
 #[no_mangle]
@@ -101,6 +102,7 @@ pub extern "C" fn rustls_supported_ciphersuite_get_name(
 arc_castable! {
     /// The complete chain of certificates to send during a TLS handshake,
     /// plus a private key that matches the end-entity (leaf) certificate.
+    ///
     /// Corresponds to `CertifiedKey` in the Rust API.
     /// <https://docs.rs/rustls/latest/rustls/sign/struct.CertifiedKey.html>
     pub struct rustls_certified_key(CertifiedKey);
@@ -515,9 +517,10 @@ pub(crate) struct ClientCertVerifierBuilder {
 }
 
 box_castable! {
-    /// A client certificate verifier being constructed. A builder can be modified by,
-    /// e.g. `rustls_web_pki_client_cert_verifier_builder_add_crl`. Once you're
-    /// done configuring settings, call `rustls_web_pki_client_cert_verifier_builder_build`
+    /// A client certificate verifier being constructed.
+    ///
+    /// A builder can be modified by, e.g. `rustls_web_pki_client_cert_verifier_builder_add_crl`.
+    /// Once you're done configuring settings, call `rustls_web_pki_client_cert_verifier_builder_build`
     /// to turn it into a `rustls_client_cert_verifier`. This object is not safe
     /// for concurrent mutation.
     ///
@@ -821,9 +824,10 @@ impl rustls_web_pki_client_cert_verifier_builder {
 }
 
 box_castable! {
-    /// A server certificate verifier being constructed. A builder can be modified by,
-    /// e.g. `rustls_web_pki_server_cert_verifier_builder_add_crl`. Once you're
-    /// done configuring settings, call `rustls_web_pki_server_cert_verifier_builder_build`
+    /// A server certificate verifier being constructed.
+    ///
+    /// A builder can be modified by, e.g. `rustls_web_pki_server_cert_verifier_builder_add_crl`.
+    /// Once you're done configuring settings, call `rustls_web_pki_server_cert_verifier_builder_build`
     /// to turn it into a `rustls_server_cert_verifier`. This object is not safe
     /// for concurrent mutation.
     ///

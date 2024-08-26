@@ -8,9 +8,10 @@ use rustls::server::VerifierBuilderError;
 use rustls::{CertRevocationListError, CertificateError, Error, InvalidMessage};
 
 /// A return value for a function that may return either success (0) or a
-/// non-zero value representing an error. The values should match socket
-/// error numbers for your operating system - for example, the integers for
-/// ETIMEDOUT, EAGAIN, or similar.
+/// non-zero value representing an error.
+///
+/// The values should match socket error numbers for your operating system - for example,
+/// the integers for ETIMEDOUT, EAGAIN, or similar.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct rustls_io_result(pub libc::c_int);

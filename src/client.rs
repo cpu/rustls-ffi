@@ -28,9 +28,10 @@ use crate::{
 };
 
 box_castable! {
-    /// A client config being constructed. A builder can be modified by,
-    /// e.g. rustls_client_config_builder_load_roots_from_file. Once you're
-    /// done configuring settings, call rustls_client_config_builder_build
+    /// A client config being constructed.
+    ///
+    /// A builder can be modified by, e.g. rustls_client_config_builder_load_roots_from_file.
+    /// Once you're done configuring settings, call rustls_client_config_builder_build
     /// to turn it into a *rustls_client_config.
     ///
     /// Alternatively, if an error occurs or, you don't wish to build a config,

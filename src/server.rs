@@ -30,9 +30,10 @@ use crate::{
 };
 
 box_castable! {
-    /// A server config being constructed. A builder can be modified by,
-    /// e.g. rustls_server_config_builder_load_native_roots. Once you're
-    /// done configuring settings, call rustls_server_config_builder_build
+    /// A server config being constructed.
+    ///
+    /// A builder can be modified by, e.g. rustls_server_config_builder_load_native_roots.
+    /// Once you're done configuring settings, call rustls_server_config_builder_build
     /// to turn it into a *const rustls_server_config. Alternatively, if
     /// an error occurs or, you don't wish to build a config, call
     /// `rustls_server_config_builder_free` to free the builder directly.
@@ -333,8 +334,9 @@ impl rustls_server_config {
 }
 
 /// Copy the server name from the server name indication (SNI) extension to `buf` which can
-/// hold up  to `count` bytes, and the length of that server name in `out_n`. The string is
-/// stored in UTF-8 with no terminating NUL byte.
+/// hold up  to `count` bytes, and the length of that server name in `out_n`.
+///
+/// The string is stored in UTF-8 with no terminating NUL byte.
 /// Returns RUSTLS_RESULT_INSUFFICIENT_SIZE if the SNI hostname is longer than `count`.
 /// Returns Ok with *out_n == 0 if there is no SNI hostname available on this connection
 /// because it hasn't been processed yet, or because the client did not send SNI.
@@ -412,6 +414,7 @@ impl ResolvesServerCert for ResolvesServerCertFromChoices {
 }
 
 /// The TLS Client Hello information provided to a ClientHelloCallback function.
+///
 /// `server_name` is the value of the ServerNameIndication extension provided
 /// by the client. If the client did not send an SNI, the length of this
 /// `rustls_string` will be 0. The signature_schemes field carries the values
@@ -443,8 +446,10 @@ impl<'a> Castable for rustls_client_hello<'a> {
 pub type rustls_client_hello_userdata = *mut c_void;
 
 /// Prototype of a callback that can be installed by the application at the
-/// `rustls_server_config`. This callback will be invoked by a `rustls_connection`
-/// once the TLS client hello message has been received.
+/// `rustls_server_config`.
+///
+/// This callback will be invoked by a `rustls_connection` once the TLS client hello
+/// message has been received.
 /// `userdata` will be set based on rustls_connection_set_userdata.
 /// `hello` gives the value of the available client announcements, as interpreted
 /// by rustls. See the definition of `rustls_client_hello` for details.
@@ -572,9 +577,10 @@ fn sigschemes(input: &[u16]) -> Vec<SignatureScheme> {
 }
 
 /// Select a `rustls_certified_key` from the list that matches the cryptographic
-/// parameters of a TLS client hello. Note that this does not do any SNI matching.
-/// The input certificates should already have been filtered to ones matching the
-/// SNI from the client hello.
+/// parameters of a TLS client hello.
+///
+/// Note that this does not do any SNI matching. The input certificates should
+/// already have been filtered to ones matching the SNI from the client hello.
 ///
 /// This is intended for servers that are configured with several keys for the
 /// same domain name(s), for example ECDSA and RSA types. The presented keys are

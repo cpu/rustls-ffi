@@ -133,11 +133,12 @@ fn test_rustls_slice_slice_bytes() {
     }
 }
 
-/// A read-only view on a Rust `&str`. The contents are guaranteed to be valid
-/// UTF-8. As an additional guarantee on top of Rust's normal UTF-8 guarantee,
-/// a `rustls_str` is guaranteed not to contain internal NUL bytes, so it is
-/// safe to interpolate into a C string or compare using strncmp. Keep in mind
-/// that it is not NUL-terminated.
+/// A read-only view on a Rust `&str`.
+///
+/// The contents are guaranteed to be valid UTF-8. As an additional guarantee on top
+/// of Rust's normal UTF-8 guarantee, a `rustls_str` is guaranteed not to contain
+/// internal NUL bytes, so it is safe to interpolate into a C string or compare
+/// using strncmp. Keep in mind that it is not NUL-terminated.
 ///
 /// The memory exposed is available as specified by the function
 /// using this in its signature. For instance, when this is a parameter to a
