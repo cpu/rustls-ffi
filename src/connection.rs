@@ -382,11 +382,10 @@ impl rustls_connection {
         conn: *const rustls_connection,
     ) -> u16 {
         ffi_panic_boundary! {
-            let conn = try_ref_from_ptr!(conn);
-            match conn.protocol_version() {
-                Some(p) => u16::from(p),
-                _ => 0,
-            }
+            try_ref_from_ptr!(conn)
+                .protocol_version()
+                .map(u16::from)
+                .unwrap_or_default()
         }
     }
 
@@ -400,10 +399,10 @@ impl rustls_connection {
         conn: *const rustls_connection,
     ) -> u16 {
         ffi_panic_boundary! {
-            match try_ref_from_ptr!(conn).negotiated_cipher_suite() {
-                Some(cs) => u16::from(cs.suite()),
-                None => u16::from(TLS_NULL_WITH_NULL_NULL),
-            }
+            try_ref_from_ptr!(conn)
+                .negotiated_cipher_suite()
+                .map(|cs| u16::from(cs.suite()))
+                .unwrap_or(u16::from(TLS_NULL_WITH_NULL_NULL))
         }
     }
 
@@ -420,14 +419,45 @@ impl rustls_connection {
         conn: *const rustls_connection,
     ) -> rustls_str<'static> {
         ffi_panic_boundary! {
-            let cs_name = try_ref_from_ptr!(conn)
+            try_ref_from_ptr!(conn)
                 .negotiated_cipher_suite()
-                .and_then(|cs| cs.suite().as_str())
-                .and_then(|name| rustls_str::try_from(name).ok());
-            match cs_name {
-                Some(cs) => cs,
-                None => rustls_str::from_str_unchecked(""),
-            }
+                .and_then(|cs| rustls_str::try_from(cs.suite().as_str().unwrap_or_default()).ok())
+                .unwrap_or(rustls_str::from_str_unchecked(""))
+        }
+    }
+
+    /// Retrieves the [IANA registered supported group identifier][IANA] agreed with the peer.
+    ///
+    /// This returns Reserved (0x0000) until the key exchange group is agreed.
+    ///
+    /// [IANA]: <https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8>
+    #[no_mangle]
+    pub extern "C" fn rustls_connection_get_negotiated_key_exchange_group(
+        conn: *const rustls_connection,
+    ) -> u16 {
+        ffi_panic_boundary! {
+            try_ref_from_ptr!(conn)
+                .negotiated_key_exchange_group()
+                .map(|kxg| u16::from(kxg.name()))
+                .unwrap_or_default()
+        }
+    }
+
+    /// Retrieves the key exchange group name agreed with the peer.
+    ///
+    /// This returns "" until the key exchange group is agreed.
+    ///
+    /// The lifetime of the `rustls_str` is the lifetime of the program, it does not
+    /// need to be freed.
+    #[no_mangle]
+    pub extern "C" fn rustls_connection_get_negotiated_key_exchange_group_name(
+        conn: *const rustls_connection,
+    ) -> rustls_str<'static> {
+        ffi_panic_boundary! {
+            try_ref_from_ptr!(conn)
+                .negotiated_key_exchange_group()
+                .and_then(|kxg| rustls_str::try_from(kxg.name().as_str().unwrap_or_default()).ok())
+                .unwrap_or(rustls_str::from_str_unchecked(""))
         }
     }
 
