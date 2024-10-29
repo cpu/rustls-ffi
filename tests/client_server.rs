@@ -268,7 +268,11 @@ struct TestCases(Vec<TestCase>);
 impl TestCases {
     fn run(&self) {
         for test_case in &self.0 {
-            assert!(test_case.run().is_ok(), "client test panicked");
+            let res = test_case.run();
+            if !res.is_ok() {
+                println!("{:?}", res);
+            }
+            assert!(res.is_ok(), "client test panicked");
         }
     }
 }
