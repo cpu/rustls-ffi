@@ -14,8 +14,11 @@ elseif (CRYPTO_PROVIDER STREQUAL "ring")
 endif ()
 
 # Define ASAN flags for non-release builds
-if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message("!!! Building WITH ASAN !!!")
     add_compile_options(-fsanitize=address)
+elseif ()
+    message("Skipping ASAN for Release build")
 endif()
 
 add_executable(client client.c common.c)
