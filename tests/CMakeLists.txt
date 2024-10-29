@@ -13,6 +13,12 @@ elseif (CRYPTO_PROVIDER STREQUAL "ring")
     add_compile_definitions(DEFINE_RING)
 endif ()
 
+# Define ASAN flags for non-release builds
+if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_compile_options(-fsanitize=address)
+    add_link_options(-fsanitize=address)
+endif()
+
 add_executable(client client.c common.c)
 add_dependencies(client rustls-ffi)
 target_include_directories(client PUBLIC ${CMAKE_SOURCE_DIR}/src)
