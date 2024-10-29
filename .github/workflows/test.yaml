@@ -24,8 +24,10 @@ jobs:
           persist-credentials: false
       - name: Install nightly rust toolchain
         uses: dtolnay/rust-toolchain@nightly
-      - name: Install NASM for aws-lc-rs
-        uses: ilammy/setup-nasm@v1
+      - name: Setup MSVC
+        uses: TheMrMilchmann/setup-msvc-dev@v3
+        with:
+          arch: x64
       - name: Configure CMake
         run: cmake -DCRYPTO_PROVIDER="${{ matrix.crypto }}" -S . -B build
       - name: Build, debug configuration
@@ -52,8 +54,6 @@ jobs:
           persist-credentials: false
       - name: Install nightly rust toolchain
         uses: dtolnay/rust-toolchain@nightly
-      - name: Install NASM for aws-lc-rs
-        uses: ilammy/setup-nasm@v1
       - name: Configure CMake
         run: cmake -DCRYPTO_PROVIDER="${{ matrix.crypto }}" -S . -B build
       - name: Build, release configuration
