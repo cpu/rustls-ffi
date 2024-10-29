@@ -13,13 +13,9 @@ elseif (CRYPTO_PROVIDER STREQUAL "ring")
     add_compile_definitions(DEFINE_RING)
 endif ()
 
-# Define ASAN flags for non-release builds
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-    message("!!! Building WITH ASAN !!!")
-    add_compile_options(-fsanitize=address)
-elseif ()
-    message("Skipping ASAN for Release build")
-endif()
+# Set sanitizer flags conditionally for Debug builds
+set(sanitizer_flags "$<$<CONFIG:Debug>:-fsanitize=address>")
+add_compile_options(${sanitizer_flags})
 
 add_executable(client client.c common.c)
 add_dependencies(client rustls-ffi)
