@@ -119,7 +119,10 @@ jobs:
         with:
           go-version: "1.22.2"
       - name: Install nightly rust toolchain
+        if: runner.os == 'MacOS'
         uses: dtolnay/rust-toolchain@nightly
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
       - name: Unit tests
         run: make FIPS=true test
       - name: Integration tests
