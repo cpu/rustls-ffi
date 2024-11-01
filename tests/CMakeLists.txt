@@ -15,12 +15,12 @@ endif ()
 
 # Set ASAN sanitizer flags conditionally for Debug builds
 set(sanitizer_flags "$<$<CONFIG:Debug>:-fsanitize=address>")
-add_compile_options(${sanitizer_flags})
 
-add_executable(client client.c common.c)
+add_executable(client client.c common.c common.h)
 add_dependencies(client rustls-ffi)
 target_include_directories(client PUBLIC ${CMAKE_SOURCE_DIR}/src)
 IF (WIN32)
+    target_compile_options(client PRIVATE ${sanitizer_flags})
     target_link_libraries(
             client
             debug "${CMAKE_SOURCE_DIR}/target/debug/rustls_ffi.lib"
@@ -30,16 +30,25 @@ IF (WIN32)
     set_property(TARGET client PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 ENDIF (WIN32)
 IF (UNIX)
-    # TODO
+    target_compile_options(client PRIVATE ${sanitizer_flags})
+    target_link_options(client PRIVATE ${sanitizer_flags})
+    target_link_libraries(
+            client
+            debug "${CMAKE_SOURCE_DIR}/target/debug/librustls_ffi.a"
+            optimized "${CMAKE_SOURCE_DIR}/target/release/librustls_ffi.a"
+            # TODO(XXX): only link -lm for cert compression enabled
+            m
+    )
 ENDIF (UNIX)
 IF (APPLE)
     # TODO
 ENDIF (APPLE)
 
-add_executable(server server.c common.c)
+add_executable(server server.c common.c common.h)
 add_dependencies(server rustls-ffi)
 target_include_directories(server PUBLIC ${CMAKE_SOURCE_DIR}/src)
 IF (WIN32)
+    target_compile_options(server PRIVATE ${sanitizer_flags})
     target_link_libraries(
             server
             debug "${CMAKE_SOURCE_DIR}/target/debug/rustls_ffi.lib"
@@ -49,7 +58,15 @@ IF (WIN32)
     set_property(TARGET server PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 ENDIF (WIN32)
 IF (UNIX)
-    # TODO
+    target_compile_options(server PRIVATE ${sanitizer_flags})
+    target_link_options(server PRIVATE ${sanitizer_flags})
+    target_link_libraries(
+            server
+            debug "${CMAKE_SOURCE_DIR}/target/debug/librustls_ffi.a"
+            optimized "${CMAKE_SOURCE_DIR}/target/release/librustls_ffi.a"
+            # TODO(XXX): only link -lm for cert compression enabled
+            m
+    )
 ENDIF (UNIX)
 IF (APPLE)
     # TODO

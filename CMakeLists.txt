@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.15)
 
-project(rustls-ffi)
+project(rustls-ffi
+  DESCRIPTION "C FFI bindings for the Rustls TLS crate")
 
 set(CRYPTO_PROVIDER "aws-lc-rs" CACHE STRING "Crypto provider to use (aws-lc-rs or ring)")
 
@@ -30,8 +31,7 @@ ExternalProject_Add(
         rustls-ffi
         DOWNLOAD_COMMAND ""
         CONFIGURE_COMMAND ""
-        BUILD_COMMAND ""
-        COMMAND cargo build --locked ${CARGO_FEATURES} "$<IF:$<CONFIG:Release>,--release,-->"
+        BUILD_COMMAND cargo build --locked ${CARGO_FEATURES} "$<IF:$<CONFIG:Release>,--release,-->"
         # Rely on cargo checking timestamps, rather than tell CMake where every
         # output is.
         BUILD_ALWAYS true
