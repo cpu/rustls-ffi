@@ -40,9 +40,6 @@ function(test_binary target_name)
                 "-framework Security"
             )
         endif()
-        if(CERT_COMPRESSION)
-            target_link_libraries(${target_name} m)
-        endif()
     endif()
 endfunction()
 
