@@ -312,3 +312,22 @@ jobs:
       - run: rustup override set "nightly-$(curl -s https://rust-lang.github.io/rustup-components-history/x86_64-unknown-linux-gnu/miri)"
       - run: rustup component add miri
       - run: cargo miri test
+
+  macos-cmake:
+    name: MacOS CMake
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        crypto: [ aws-lc-rs, ring ]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install nightly rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+      - name: Configure CMake
+        run: cmake -DCRYPTO_PROVIDER="${{ matrix.crypto }}" -S . -B build
+      - name: Build
+        run: cmake --build build
+      - name: Integration test, debug configuration
+        run: cargo test --release --no-default-features --features="${{ matrix.crypto }}" --locked --test client_server client_server_integration -- --ignored --exact
