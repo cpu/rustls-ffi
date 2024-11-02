@@ -332,5 +332,5 @@ jobs:
       - name: Integration test, debug configuration
         run: cargo test --release --no-default-features --features="${{ matrix.crypto }}" --locked --test client_server client_server_integration -- --ignored --exact
         env:
-          CLIENT_BINARY: build\tests\client
-          SERVER_BINARY: build\tests\server
+          CLIENT_BINARY: build/tests/client
+          SERVER_BINARY: build/tests/server
