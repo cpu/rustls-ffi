@@ -18,15 +18,14 @@ option(
     "Enable brotli and zlib certificate compression support"
 )
 
-set(CARGO_FEATURES --no-default-features)
 if(CRYPTO_PROVIDER STREQUAL "aws-lc-rs")
-    list(APPEND CARGO_FEATURES --features=aws-lc-rs)
+    list(APPEND CARGO_FEATURES aws-lc-rs)
 elseif(CRYPTO_PROVIDER STREQUAL "ring")
-    list(APPEND CARGO_FEATURES --features=ring)
+    list(APPEND CARGO_FEATURES ring)
 endif()
 
 if(CERT_COMPRESSION)
-    list(APPEND CARGO_FEATURES --features=cert_compression)
+    list(APPEND CARGO_FEATURES cert_compression)
 endif()
 
 # By default w/ Makefile or Ninja generators the CMAKE_BUILD_TYPE is ""

@@ -1,24 +1,17 @@
-include(ExternalProject)
-set_directory_properties(PROPERTIES EP_PREFIX ${CMAKE_BINARY_DIR}/rust)
+include(FetchContent)
 
-ExternalProject_Add(
-    rustls-ffi
-    DOWNLOAD_COMMAND ""
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND
-        cargo build --locked ${CARGO_FEATURES}
-        "$<IF:$<CONFIG:Release>,--release,-->"
-    # Rely on cargo checking timestamps, rather than tell CMake where every
-    # output is.
-    BUILD_ALWAYS true
-    INSTALL_COMMAND ""
-    # Run cargo test with --quiet because msbuild will treat the presence
-    # of "error" in stdout as an error, and we have some test functions that
-    # end in "_error". Quiet mode suppresses test names, so this is a
-    # sufficient workaround.
-    TEST_COMMAND
-        cargo test --locked ${CARGO_FEATURES}
-        "$<IF:$<CONFIG:Release>,--release,-->" --quiet
+FetchContent_Declare(
+    Corrosion
+    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+    GIT_TAG v0.5
+)
+FetchContent_MakeAvailable(Corrosion)
+
+corrosion_import_crate(
+        MANIFEST_PATH Cargo.toml
+        PROFILE "$<IF:$<CONFIG:Release>,release,dev>"
+        NO_DEFAULT_FEATURES
+        FEATURES ${CARGO_FEATURES}
 )
 
 add_custom_target(
@@ -44,13 +37,14 @@ else()
     set(SERVER_BINARY "${CMAKE_BINARY_DIR}/tests/server")
 endif()
 
+string(JOIN "," CARGO_FEATURES_STR ${CARGO_FEATURES})
 add_custom_target(
     integration-test
     DEPENDS client server
     COMMAND
         ${CMAKE_COMMAND} -E env CLIENT_BINARY=${CLIENT_BINARY} ${CMAKE_COMMAND}
-        -E env SERVER_BINARY=${SERVER_BINARY} cargo test --locked
-        ${CARGO_FEATURES} "$<IF:$<CONFIG:Release>,--release,-->" --test
+        -E env SERVER_BINARY=${SERVER_BINARY} cargo test --locked --features
+        "${CARGO_FEATURES_STR}" "$<IF:$<CONFIG:Release>,--release,>" --test
         client_server client_server_integration -- --ignored --exact
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )

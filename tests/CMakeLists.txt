@@ -2,17 +2,13 @@ function(test_binary target_name)
     add_executable(${target_name})
     target_sources(${target_name} PRIVATE ${target_name}.c common.c common.h)
 
-    add_dependencies(${target_name} rustls-ffi)
     target_include_directories(${target_name} PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
     if(WIN32)
         target_compile_options(${target_name} PRIVATE ${sanitizer_flags})
         target_link_libraries(
             ${target_name}
-            debug
-            "${CMAKE_SOURCE_DIR}/target/debug/rustls_ffi.lib"
-            optimized
-            "${CMAKE_SOURCE_DIR}/target/release/rustls_ffi.lib"
+            rustls_ffi
             advapi32.lib
             bcrypt.lib
             crypt32.lib
@@ -36,13 +32,7 @@ function(test_binary target_name)
     elseif(UNIX)
         target_compile_options(${target_name} PRIVATE ${sanitizer_flags})
         target_link_options(${target_name} PRIVATE ${sanitizer_flags})
-        target_link_libraries(
-            ${target_name}
-            debug
-            "${CMAKE_SOURCE_DIR}/target/debug/librustls_ffi.a"
-            optimized
-            "${CMAKE_SOURCE_DIR}/target/release/librustls_ffi.a"
-        )
+        target_link_libraries(${target_name} rustls_ffi)
         if(APPLE)
             target_link_libraries(
                 ${target_name}
