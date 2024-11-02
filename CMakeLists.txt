@@ -31,22 +31,6 @@ ExternalProject_Add(
 )
 
 add_custom_target(
-    rust-format-fix
-    COMMAND sed -i -e 's/ffi_panic_boundary! {/if true {/g' src/*.rs
-    COMMAND cargo fmt
-    COMMAND sed -i -e 's/if true {/ffi_panic_boundary! {/g' src/*.rs
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-)
-
-add_custom_target(
-    rust-format-check
-    COMMAND sed -i -e 's/ffi_panic_boundary! {/if true {/g' src/*.rs
-    COMMAND cargo fmt --check
-    COMMAND sed -i -e 's/if true {/ffi_panic_boundary! {/g' src/*.rs
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-)
-
-add_custom_target(
     cbindgen
     COMMAND cbindgen > "src/rustls.h"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -77,5 +61,37 @@ add_custom_target(
         -E env SERVER_BINARY=${SERVER_BINARY} cargo test --locked
         ${CARGO_FEATURES} "$<IF:$<CONFIG:Release>,--release,-->" --test
         client_server client_server_integration -- --ignored --exact
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+add_custom_target(
+    rust-format-fix
+    COMMAND sed -i -e 's/ffi_panic_boundary! {/if true {/g' src/*.rs
+    COMMAND cargo fmt
+    COMMAND sed -i -e 's/if true {/ffi_panic_boundary! {/g' src/*.rs
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+add_custom_target(
+    rust-format-check
+    COMMAND sed -i -e 's/ffi_panic_boundary! {/if true {/g' src/*.rs
+    COMMAND cargo fmt --check
+    COMMAND sed -i -e 's/if true {/ffi_panic_boundary! {/g' src/*.rs
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+add_custom_target(
+    cmake-format-fix
+    COMMAND
+        gersemi --definitions tests/CMakeLists.txt -i CMakeLists.txt
+        cmake/*.cmake tests/CMakeLists.txt
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+add_custom_target(
+    cmake-format-check
+    COMMAND
+        gersemi --definitions tests/CMakeLists.txt -c CMakeLists.txt
+        cmake/*.cmake tests/CMakeLists.txt
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
