@@ -74,8 +74,8 @@ jobs:
       - name: Verify release builds were not using ASAN
         if: runner.os == 'Linux' # For 'nm'
         run: |
-          nm build/tests/client | grep -v '__asan_init'
-          nm build/tests/server | grep -v '__asan_init'
+          ! nm build/tests/client | grep '__asan_init' 
+          ! nm build/tests/server | grep '__asan_init' 
 
   valgrind:
     name: Valgrind
@@ -265,6 +265,9 @@ jobs:
         with:
           toolchain: 1.67.1
           components: rustfmt
+
+      - name: Install Gersemi
+        run: pip3 install gersemi
 
       - name: Setup cmake build
         run: cmake -S . -B build
