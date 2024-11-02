@@ -7,7 +7,6 @@ project(rustls-ffi DESCRIPTION "C FFI bindings for the Rustls TLS crate")
 
 include(cmake/options.cmake)
 include(cmake/rust.cmake)
-include(cmake/tests.cmake)
 include(cmake/formatting.cmake)
 
 add_subdirectory(tests)
