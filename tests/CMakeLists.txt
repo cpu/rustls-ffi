@@ -76,7 +76,7 @@ elseif(CRYPTO_PROVIDER STREQUAL "ring")
 endif()
 
 # Set ASAN sanitizer flags conditionally for Debug builds
-set(sanitizer_flags "$<$<CONFIG:Debug>:-fsanitize=address>")
+set(sanitizer_flags "$<$<CONFIG:Debug>:-fsanitize=address,undefined>")
 
 # Add client and server test binary targets
 test_binary(client)
