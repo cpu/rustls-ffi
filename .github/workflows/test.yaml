@@ -327,6 +327,8 @@ jobs:
         uses: dtolnay/rust-toolchain@nightly
       - name: Configure CMake
         run: cmake -DCRYPTO_PROVIDER="${{ matrix.crypto }}" -DCMAKE_OSX_DEPLOYMENT_TARGET=14.5 -S . -B build
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
       - name: Build
         run: cmake --build build
       - name: Integration test, debug configuration
