@@ -4,17 +4,45 @@ function(test_binary target_name)
 
     target_include_directories(${target_name} PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
-    target_compile_options(${target_name} PRIVATE ${sanitizer_flags})
-    target_link_libraries(${target_name} rustls_ffi)
-
     if(WIN32)
+        target_compile_options(${target_name} PRIVATE ${sanitizer_flags})
+        target_link_libraries(
+            ${target_name}
+            rustls_ffi
+            advapi32.lib
+            bcrypt.lib
+            crypt32.lib
+            cryptnet.lib
+            kernel32.lib
+            ncrypt.lib
+            bcrypt.lib
+            advapi32.lib
+            legacy_stdio_definitions.lib
+            kernel32.lib
+            ntdll.lib
+            userenv.lib
+            ws2_32.lib
+            synchronization.lib
+            msvcrt.lib
+        )
         set_property(
             TARGET ${target_name}
             PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"
         )
     elseif(UNIX)
-        # Also have to link ASAN on UNIX
+        target_compile_options(${target_name} PRIVATE ${sanitizer_flags})
         target_link_options(${target_name} PRIVATE ${sanitizer_flags})
+        target_link_libraries(${target_name} rustls_ffi)
+        if(APPLE)
+            target_link_libraries(
+                ${target_name}
+                "-framework Foundation"
+                "-framework Security"
+            )
+        endif()
+        if(CERT_COMPRESSION)
+            target_link_libraries(${target_name} m)
+        endif()
     endif()
 endfunction()
 
