@@ -136,9 +136,9 @@ jobs:
 
       - name: Configure CMake
         run: |
-          cmake \
-            -DCRYPTO_PROVIDER="${{ matrix.crypto }}" \
-            -DCERT_COMPRESSION="${{ matrix.cert_compression }}" \
+          cmake
+            -DCRYPTO_PROVIDER="${{ matrix.crypto }}"
+            -DCERT_COMPRESSION="${{ matrix.cert_compression }}"
             -S . -B build
 
       - name: Build
