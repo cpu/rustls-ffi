@@ -19,6 +19,7 @@ jobs:
         # test a bunch of toolchain and crypto providers on ubuntu
         cc: [ clang, gcc ]
         crypto: [ aws-lc-rs, ring ]
+        cert_compression: [ off ]
         rust:
           - stable
           - beta
@@ -33,6 +34,16 @@ jobs:
             cc: clang
             crypto: aws-lc-rs
             rust: stable
+            cert_compression: off
+          - os: macos-latest
+            cc: clang
+            crypto: aws-lc-rs
+            rust: stable
+            cert_compression: on
+          - os: ubuntu-latest
+            cc: clang
+            crypto: aws-lc-rs
+            cert_compression: on
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -50,6 +61,7 @@ jobs:
           CXX=${{matrix.cc}} \
           cmake \
             -DCRYPTO_PROVIDER=${{matrix.crypto}} \
+            -DCERT_COMPRESSION=${{matrix.cert_compression}} \
             -DCMAKE_BUILD_TYPE=Debug \
             ${{ matrix.os == 'macos-latest' && '-DCMAKE_OSX_DEPLOYMENT_TARGET=14.5' || '' }} \
             -S . -B build
@@ -93,36 +105,18 @@ jobs:
 
       - run: VALGRIND=valgrind cmake --build build --target integration-test
 
-  cert-compression:
-    name: Certificate Compression
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Install nightly rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: Setup cmake build
-        run: cmake -S . -B build -DCERT_COMPRESSION=true
-
-      - name: Platform verifier connect test
-        run: cmake --build build --target connect-test
-
-      - name: Integration tests
-        run: cmake --build build --target integration-test
-
-  test-windows-cmake-debug:
-    name: Windows CMake, Debug configuration
+  test-windows-cmake:
+    name: Windows CMake
     runs-on: windows-latest
     strategy:
       matrix:
         crypto: [ aws-lc-rs, ring ]
+        config: [ Debug, Release ]
+        cert_compression: [ off ]
+        include:
+          - crypto: aws-lc-rs
+            config: Release
+            cert_compression: on
     steps:
       - uses: actions/checkout@v4
         with:
@@ -141,55 +135,17 @@ jobs:
           arch: x64
 
       - name: Configure CMake
-        run: cmake -DCRYPTO_PROVIDER="${{ matrix.crypto }}" -S . -B build
+        run: |
+          cmake \
+            -DCRYPTO_PROVIDER="${{ matrix.crypto }}" \
+            -DCERT_COMPRESSION=${{ matrix.cert_compression }}" \
+            -S . -B build
 
-      - name: Build, debug configuration
-        run: cmake --build build --config Debug
+      - name: Build
+        run: cmake --build build --config "${{ matrix.config }}"
 
-      - name: Integration test, debug configuration
-        run: cmake --build build --config Debug --target integration-test
-
-  test-windows-cmake-release:
-    name: Windows CMake, Release configuration
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        crypto: [ aws-lc-rs, ring ]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Install nightly rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: Configure CMake
-        run: cmake -DCRYPTO_PROVIDER="${{ matrix.crypto }}" -S . -B build
-
-      - name: Build, release configuration
-        run: cmake --build build --config Release
-
-      - name: Integration test, release configuration
-        run: cmake --build build --config Release --target integration-test
-
-  test-windows-cmake-compression:
-    name: Windows CMake, Cert. Compression
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Install nightly rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-
-      - name: Configure CMake enabling cert compression
-        run: cmake -DCERT_COMPRESSION="true" -S . -B build
-
-      - name: Build, release configuration, compression
-        run: cmake --build build --config Release
-
-      - name: Integration test, release configuration, compression
-        run: cmake --build build --config Release --target integration-test
+      - name: Integration test
+        run: cmake --build build --config "${{matrix.config}}" --target integration-test
 
   ensure-header-updated:
     runs-on: ubuntu-latest
