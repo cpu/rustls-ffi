@@ -59,8 +59,6 @@ elseif(APPLE) # Check this before UNIX!
         LINKER:-dead_strip
         -framework
         Security
-        -framework
-        Foundation
     )
 elseif(UNIX)
     add_link_options(LINKER:--gc-sections)
