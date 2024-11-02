@@ -95,3 +95,13 @@ add_custom_target(
         cmake/*.cmake tests/CMakeLists.txt
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
+
+add_custom_target(
+    format-fix
+    DEPENDS rust-format-fix c-format-fix cmake-format-fix
+)
+
+add_custom_target(
+    format-check
+    DEPENDS rust-format-check c-format-check cmake-format-check
+)
