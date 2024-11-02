@@ -41,6 +41,9 @@ function(test_binary target_name)
             optimized
             "${CMAKE_SOURCE_DIR}/target/release/librustls_ffi.a"
         )
+        if(APPLE)
+            target_link_libraries(${target_name} "-framework Foundation" "-framework Security")
+        endif()
         if(CERT_COMPRESSION)
             target_link_libraries(${target_name} m)
         endif()
@@ -57,8 +60,6 @@ if(WIN32)
 elseif(APPLE) # Check this before UNIX!
     add_link_options(
         LINKER:-dead_strip
-        "-framework Security"
-        "-framework Foundation"
     )
 elseif(UNIX)
     add_link_options(LINKER:--gc-sections)
