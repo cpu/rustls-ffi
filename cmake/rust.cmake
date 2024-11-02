@@ -42,9 +42,11 @@ add_custom_target(
     integration-test
     DEPENDS client server
     COMMAND
+    COMMAND
         ${CMAKE_COMMAND} -E env CLIENT_BINARY=${CLIENT_BINARY} ${CMAKE_COMMAND}
-        -E env SERVER_BINARY=${SERVER_BINARY} cargo test --locked --features
-        "${CARGO_FEATURES_STR}" "$<IF:$<CONFIG:Release>,--release,>" --test
-        client_server client_server_integration -- --ignored --exact
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        -E env SERVER_BINARY=${SERVER_BINARY} $<TARGET_FILE:Rust::Cargo> test
+        --target ${_CORROSION_RUST_CARGO_TARGET} --features
+        "${CARGO_FEATURES_STR}" --test client_server client_server_integration
+        -- --ignored --exact
+    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/${build_dir}
 )

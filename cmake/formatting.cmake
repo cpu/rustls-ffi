@@ -1,7 +1,7 @@
 add_custom_target(
     rust-format-fix
     COMMAND sed -i -e 's/ffi_panic_boundary! {/if true {/g' src/*.rs
-    COMMAND cargo fmt
+    COMMAND $<TARGET_FILE:Rust::Cargo> fmt
     COMMAND sed -i -e 's/if true {/ffi_panic_boundary! {/g' src/*.rs
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
@@ -9,7 +9,7 @@ add_custom_target(
 add_custom_target(
     rust-format-check
     COMMAND sed -i -e 's/ffi_panic_boundary! {/if true {/g' src/*.rs
-    COMMAND cargo fmt --check
+    COMMAND $<TARGET_FILE:Rust::Cargo> fmt --check
     COMMAND sed -i -e 's/if true {/ffi_panic_boundary! {/g' src/*.rs
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
