@@ -72,10 +72,10 @@ function(add_c_format_targets targets)
 
     # A check target that checks if the source files are formatted correctly.
     add_custom_target(
-            c-format-check
-            COMMAND clang-format --dry-run -Werror -i ${all_sources}
-            COMMAND_EXPAND_LISTS
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        c-format-check
+        COMMAND clang-format --dry-run -Werror -i ${all_sources}
+        COMMAND_EXPAND_LISTS
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     )
 endfunction()
 
