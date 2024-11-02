@@ -43,33 +43,39 @@ jobs:
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
-      - name: Unit tests
-        env:
-          CARGO_UNSTABLE_HTTP_REGISTRY: true
-        run: make CC=${{ matrix.cc }} PROFILE=debug CRYPTO_PROVIDER=${{ matrix.crypto }} test
+
+      - name: Setup cmake build
+        run: |
+          CC=${{matrix.cc}} \
+          CXX=${{matrix.cc}} \
+          cmake \
+            -DCRYPTO_PROVIDER=${{matrix.crypto}} \
+            -DCMAKE_BUILD_TYPE=Debug \
+            ${{ matrix.os == 'macos-latest' && '-DCMAKE_OSX_DEPLOYMENT_TARGET=14.5' || '' }} \
+            -S . -B build
+
       - name: Platform verifier connect test
-        run: make PROFILE=debug CRYPTO_PROVIDER=${{ matrix.crypto }} connect-test
+        run: cmake --build build --target connect-test
+
       - name: Integration tests
-        env:
-          CARGO_UNSTABLE_HTTP_REGISTRY: true
-        # Note: we run this after the connect-tests because the static libs test rebuilds the crate
-        #       squashing whatever RUSTFLAGS the Makefile has set and producing a librustls_ffi.a
-        #       for the default build config.
-        run: make CC=${{ matrix.cc }} PROFILE=debug CRYPTO_PROVIDER=${{ matrix.crypto }} integration
+        run: cmake --build build --target integration-test
+
       - name: Verify debug builds were using ASAN
         if: runner.os == 'Linux' # For 'nm'
         run: |
-          nm target/client | grep '__asan_init'
-          nm target/server | grep '__asan_init'
+          nm build/tests/client | grep '__asan_init'
+          nm build/tests/server | grep '__asan_init'
+
       - name: Build release binaries
         run: |
-          make clean
-          make CC=${{ matrix.cc }} CRYPTO_PROVIDER=${{ matrix.crypto }} PROFILE=release test
+          cmake --build build -- clean
+          CC=${{matrix.cc}} CXX=${{matrix.cc}} cmake -S . -B build -DCRYPTO_PROVIDER=${{matrix.crypto}} -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
       - name: Verify release builds were not using ASAN
         if: runner.os == 'Linux' # For 'nm'
         run: |
-          nm target/client | grep -v '__asan_init'
-          nm target/server | grep -v '__asan_init'
+          nm build/tests/client | grep -v '__asan_init'
+          nm build/tests/server | grep -v '__asan_init'
 
   valgrind:
     name: Valgrind
@@ -78,9 +84,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+
       - name: Install valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
-      - run: VALGRIND=valgrind make PROFILE=release test integration
+
+      - name: Setup cmake build
+        run: cmake -S . -B build
+
+      - run: VALGRIND=valgrind cmake --build build --target integration-test
 
   cert-compression:
     name: Certificate Compression
@@ -89,15 +100,22 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+
       - name: Install nightly rust toolchain
         uses: dtolnay/rust-toolchain@nightly
-      - name: Unit tests
-        run: make PROFILE=debug CERT_COMPRESSION=true test
+
+      - name: Setup cmake build
+        run: cmake -S . -B build -DCERT_COMPRESSION=true
+
+      - name: Platform verifier connect test
+        run: cmake --build build --target connect-test
+
       - name: Integration tests
-        run: make PROFILE=debug CERT_COMPRESSION=true integration
+        run: cmake --build build --target integration-test
 
   test-windows-cmake-debug:
     name: Windows CMake, Debug configuration
@@ -109,8 +127,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+
       - name: Install nightly rust toolchain
         uses: dtolnay/rust-toolchain@nightly
+
       # For Debug builds we use ASAN, which requires a modern MSVC on $PATH
       # to provide the ASAN clang_rt.asan_*.dll runtime deps or
       # the built client/server binary will exit immediately with 
@@ -119,15 +139,15 @@ jobs:
         uses: TheMrMilchmann/setup-msvc-dev@v3
         with:
           arch: x64
+
       - name: Configure CMake
         run: cmake -DCRYPTO_PROVIDER="${{ matrix.crypto }}" -S . -B build
+
       - name: Build, debug configuration
         run: cmake --build build --config Debug
+
       - name: Integration test, debug configuration
-        run: cargo test --no-default-features --features="${{ matrix.crypto }}" --locked --test client_server client_server_integration -- --ignored --exact
-        env:
-          CLIENT_BINARY: D:\a\rustls-ffi\rustls-ffi\build\tests\Debug\client.exe
-          SERVER_BINARY: D:\a\rustls-ffi\rustls-ffi\build\tests\Debug\server.exe
+        run: cmake --build build --config Debug --target integration-test
 
   test-windows-cmake-release:
     name: Windows CMake, Release configuration
@@ -139,17 +159,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+
       - name: Install nightly rust toolchain
         uses: dtolnay/rust-toolchain@nightly
+
       - name: Configure CMake
         run: cmake -DCRYPTO_PROVIDER="${{ matrix.crypto }}" -S . -B build
+
       - name: Build, release configuration
         run: cmake --build build --config Release
+
       - name: Integration test, release configuration
-        run: cargo test --no-default-features --features="${{ matrix.crypto }}" --locked --test client_server client_server_integration -- --ignored --exact
-        env:
-          CLIENT_BINARY: D:\a\rustls-ffi\rustls-ffi\build\tests\Release\client.exe
-          SERVER_BINARY: D:\a\rustls-ffi\rustls-ffi\build\tests\Release\server.exe
+        run: cmake --build build --config Release --target integration-test
 
   test-windows-cmake-compression:
     name: Windows CMake, Cert. Compression
@@ -160,15 +181,15 @@ jobs:
           persist-credentials: false
       - name: Install nightly rust toolchain
         uses: dtolnay/rust-toolchain@nightly
+
       - name: Configure CMake enabling cert compression
         run: cmake -DCERT_COMPRESSION="true" -S . -B build
+
       - name: Build, release configuration, compression
         run: cmake --build build --config Release
+
       - name: Integration test, release configuration, compression
-        run: cargo test --features=cert_compression --locked --test client_server client_server_integration -- --ignored --exact
-        env:
-          CLIENT_BINARY: D:\a\rustls-ffi\rustls-ffi\build\tests\Release\client.exe
-          SERVER_BINARY: D:\a\rustls-ffi\rustls-ffi\build\tests\Release\server.exe
+        run: cmake --build build --config Release --target integration-test
 
   ensure-header-updated:
     runs-on: ubuntu-latest
@@ -176,17 +197,23 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+
       - name: Install nightly rust toolchain
         uses: dtolnay/rust-toolchain@nightly
+
       - name: Install cbindgen
         # Pin the installed version of cbindgen so that local usage can be
         # reliably matched to CI. There can be non-semantic differences in
         # output between point releases of cbindgen that will fail this check
         # otherwise.
         run: cargo install cbindgen --force --version 0.27.0
+
       - run: touch src/lib.rs
+
       - run: cbindgen --version
-      - run: make src/rustls.h
+
+      - run: cbindgen > src/rustls.h
+
       - run: git diff --exit-code
 
   docs:
@@ -218,9 +245,6 @@ jobs:
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@nightly
 
-      - name: Build client/server binaries
-        run: make target/client target/server
-
       - name: cargo test (debug; default features; -Z minimal-versions)
         run: cargo -Z minimal-versions test --locked
 
@@ -235,15 +259,18 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.67.1
           components: rustfmt
-      - name: Check Rust formatting
-        run: cargo fmt --all -- --check
-      - name: Check C formatting
-        run: make format-check
+
+      - name: Setup cmake build
+        run: cmake -S . -B build
+
+      - name: Check formatting
+        run: cmake --build build --target format-check
 
   clippy:
     name: Clippy
@@ -253,16 +280,19 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+
       - name: Check clippy (default features)
         # We allow unknown lints here because sometimes the nightly job
         # (below) will have a new lint that we want to suppress.
         # If we suppress (e.g. #![allow(clippy::arc_with_non_send_sync)]),
         # we would get an unknown-lint error from older clippy versions.
         run: cargo clippy --locked --workspace --all-targets -- -D warnings -A unknown-lints
+
       - name: Check clippy (ring)
         run: cargo clippy --locked --workspace --all-targets --no-default-features --features=ring -- -D warnings -A unknown-lints
 
@@ -274,14 +304,18 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
       - name: Install rust toolchain
         uses: dtolnay/rust-toolchain@nightly
         with:
           components: clippy
+
       - name: Check clippy (default features)
         run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
       - name: Check clippy (ring)
         run: cargo clippy --locked --workspace --all-targets --no-default-features --features=ring -- -D warnings
+
       - name: Check clippy (all features)
         # We only test --all-features on nightly, because two of the features
         # (read_buf, core_io_borrowed_buf) require nightly.
@@ -295,6 +329,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
       - name: Clang tidy
         run: clang-tidy tests/*.c -- -I src/
 
@@ -309,28 +344,9 @@ jobs:
 
       - name: Install nightly Rust
         uses: dtolnay/rust-toolchain@nightly
-      - run: rustup override set "nightly-$(curl -s https://rust-lang.github.io/rustup-components-history/x86_64-unknown-linux-gnu/miri)"
-      - run: rustup component add miri
-      - run: cargo miri test
 
-  macos-cmake:
-    name: MacOS CMake
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        crypto: [ aws-lc-rs, ring ]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Install nightly rust toolchain
-        uses: dtolnay/rust-toolchain@nightly
-      - name: Configure CMake
-        run: cmake -DCRYPTO_PROVIDER="${{ matrix.crypto }}" -DCMAKE_OSX_DEPLOYMENT_TARGET=14.5 -DCMAKE_BUILD_TYPE=Debug -S . -B build
-      - name: Build
-        run: cmake --build build
-      - name: Integration test, debug configuration
-        run: cargo test --no-default-features --features="${{ matrix.crypto }}" --locked --test client_server client_server_integration -- --ignored --exact
-        env:
-          CLIENT_BINARY: build/tests/client
-          SERVER_BINARY: build/tests/server
+      - run: rustup override set "nightly-$(curl -s https://rust-lang.github.io/rustup-components-history/x86_64-unknown-linux-gnu/miri)"
+
+      - run: rustup component add miri
+
+      - run: cargo miri test
