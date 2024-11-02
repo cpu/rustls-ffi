@@ -1,21 +1,21 @@
 set(CRYPTO_PROVIDER
-        "aws-lc-rs"
-        CACHE STRING
-        "Crypto provider to use (aws-lc-rs or ring)"
+    "aws-lc-rs"
+    CACHE STRING
+    "Crypto provider to use (aws-lc-rs or ring)"
 )
 
 if(
-        NOT (CRYPTO_PROVIDER STREQUAL "aws-lc-rs" OR CRYPTO_PROVIDER STREQUAL "ring")
+    NOT (CRYPTO_PROVIDER STREQUAL "aws-lc-rs" OR CRYPTO_PROVIDER STREQUAL "ring")
 )
     message(
-            FATAL_ERROR
-            "Invalid crypto provider specified: ${CRYPTO_PROVIDER}. Must be 'aws-lc-rs' or 'ring'."
+        FATAL_ERROR
+        "Invalid crypto provider specified: ${CRYPTO_PROVIDER}. Must be 'aws-lc-rs' or 'ring'."
     )
 endif()
 
 option(
-        CERT_COMPRESSION
-        "Enable brotli and zlib certificate compression support"
+    CERT_COMPRESSION
+    "Enable brotli and zlib certificate compression support"
 )
 
 set(CARGO_FEATURES --no-default-features)
@@ -39,9 +39,9 @@ set(default_build_type "Release")
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(STATUS "Using default build type: ${default_build_type}")
     set(CMAKE_BUILD_TYPE
-            "${default_build_type}"
-            CACHE STRING
-            "Choose the type of build."
-            FORCE
+        "${default_build_type}"
+        CACHE STRING
+        "Choose the type of build."
+        FORCE
     )
 endif()

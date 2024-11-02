@@ -1,5 +1,7 @@
 function(test_binary target_name)
-    add_executable(${target_name} ${target_name}.c common.c common.h)
+    add_executable(${target_name})
+    target_sources(${target_name} PRIVATE ${target_name}.c common.c common.h)
+
     add_dependencies(${target_name} rustls-ffi)
     target_include_directories(${target_name} PRIVATE ${CMAKE_SOURCE_DIR}/src)
 
@@ -71,6 +73,7 @@ if(UNIX) # Apple covered by this too
     add_compile_options(-Werror -Wall -Wextra -Wpedantic)
 endif()
 
+# TODO(@cpu): this could probably be done more elegantly.
 if(CRYPTO_PROVIDER STREQUAL "aws_lc_rs")
     add_compile_definitions(DEFINE_AWS_LC_RS)
 elseif(CRYPTO_PROVIDER STREQUAL "ring")
@@ -91,3 +94,23 @@ endif()
 # Add client and server test binary targets
 test_binary(client)
 test_binary(server)
+
+# Add a custom target to format the C code for client/server binary targets.
+add_custom_target(
+    format-fix
+    COMMAND
+        clang-format -i $<TARGET_PROPERTY:client,SOURCES>
+        $<TARGET_PROPERTY:server,SOURCES>
+    COMMAND_EXPAND_LISTS
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
+# Add a custom target to format the C code for client/server binary targets.
+add_custom_target(
+    format-check
+    COMMAND
+        clang-format --dry-run -Werror -i $<TARGET_PROPERTY:client,SOURCES>
+        $<TARGET_PROPERTY:server,SOURCES>
+    COMMAND_EXPAND_LISTS
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
