@@ -56,23 +56,26 @@ function(test_binary target_name)
     endif()
 endfunction()
 
-function(add_format_target targets mode)
-    set(extra_args "")
-
-    if("${mode}" STREQUAL "check")
-        set(extra_args --dry-run -Werror)
-    endif()
-
+function(add_c_format_targets targets)
     set(all_sources "")
     foreach(target ${targets})
         list(APPEND all_sources $<TARGET_PROPERTY:${target},SOURCES>)
     endforeach()
 
+    # A fix target that formats the source files in-place.
     add_custom_target(
-        format-${mode}
-        COMMAND clang-format ${extra_args} -i ${all_sources}
+        c-format-fix
+        COMMAND clang-format -i ${all_sources}
         COMMAND_EXPAND_LISTS
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+
+    # A check target that checks if the source files are formatted correctly.
+    add_custom_target(
+            c-format-check
+            COMMAND clang-format --dry-run -Werror -i ${all_sources}
+            COMMAND_EXPAND_LISTS
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     )
 endfunction()
 
@@ -115,6 +118,5 @@ endif()
 test_binary(client)
 test_binary(server)
 
-# Add format-fix and format-check targets for the test binary sourcecode.
-add_format_target("client;server" "fix")
-add_format_target("client;server" "check")
+# Add c-format-fix and c-format-check targets for the test binary sourcecode.
+add_c_format_targets("client;server")
