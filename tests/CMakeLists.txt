@@ -1,18 +1,48 @@
-IF (WIN32)
+function(test_binary target_name)
+    add_executable(${target_name} ${target_name}.c common.c common.h)
+    add_dependencies(${target_name} rustls-ffi)
+    target_include_directories(${target_name} PRIVATE ${CMAKE_SOURCE_DIR}/src)
+
+    if (WIN32)
+        target_compile_options(${target_name} PRIVATE ${sanitizer_flags})
+        target_link_libraries(
+            ${target_name}
+            debug "${CMAKE_SOURCE_DIR}/target/debug/rustls_ffi.lib"
+            optimized "${CMAKE_SOURCE_DIR}/target/release/rustls_ffi.lib"
+            advapi32.lib bcrypt.lib crypt32.lib cryptnet.lib kernel32.lib ncrypt.lib
+            bcrypt.lib advapi32.lib legacy_stdio_definitions.lib kernel32.lib
+            ntdll.lib userenv.lib ws2_32.lib synchronization.lib msvcrt.lib
+        )
+        set_property(TARGET ${target_name} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+    elseif (UNIX)
+        target_compile_options(${target_name} PRIVATE ${sanitizer_flags})
+        target_link_options(${target_name} PRIVATE ${sanitizer_flags})
+        target_link_libraries(
+            ${target_name}
+            debug "${CMAKE_SOURCE_DIR}/target/debug/librustls_ffi.a"
+            optimized "${CMAKE_SOURCE_DIR}/target/release/librustls_ffi.a"
+        )
+        if (CERT_COMPRESSION)
+            target_link_libraries(${target_name} m)
+        endif()
+    endif()
+endfunction()
+
+if (WIN32)
     add_compile_definitions(
-            _WIN32_WINNT=0x601
-            _CRT_SECURE_NO_WARNINGS
-            _CRT_NONSTDC_NO_WARNINGS
-            ssize_t=int
+        _WIN32_WINNT=0x601
+        _CRT_SECURE_NO_WARNINGS
+        _CRT_NONSTDC_NO_WARNINGS
+        ssize_t=int
     )
-elseif (APPLE)
-  add_link_options(LINKER:-dead_strip -framework Security -framework Foundation)
+elseif (APPLE) # Check this before UNIX!
+    add_link_options(LINKER:-dead_strip -framework Security -framework Foundation)
 elseif (UNIX)
-  add_link_options(LINKER:--gc-sections)
+    add_link_options(LINKER:--gc-sections)
 endif ()
 
-if(UNIX) # Apple counts too
-  add_compile_options(-Werror -Wall -Wextra -Wpedantic)
+if (UNIX) # Apple covered by this too
+    add_compile_options(-Werror -Wall -Wextra -Wpedantic)
 endif ()
 
 if (CRYPTO_PROVIDER STREQUAL "aws_lc_rs")
@@ -24,61 +54,6 @@ endif ()
 # Set ASAN sanitizer flags conditionally for Debug builds
 set(sanitizer_flags "$<$<CONFIG:Debug>:-fsanitize=address>")
 
-add_executable(client client.c common.c common.h)
-add_dependencies(client rustls-ffi)
-target_include_directories(client PUBLIC ${CMAKE_SOURCE_DIR}/src)
-IF (WIN32)
-    target_compile_options(client PRIVATE ${sanitizer_flags})
-    target_link_libraries(
-            client
-            debug "${CMAKE_SOURCE_DIR}/target/debug/rustls_ffi.lib"
-            optimized "${CMAKE_SOURCE_DIR}/target/release/rustls_ffi.lib"
-            advapi32.lib bcrypt.lib crypt32.lib cryptnet.lib kernel32.lib ncrypt.lib bcrypt.lib advapi32.lib legacy_stdio_definitions.lib kernel32.lib advapi32.lib kernel32.lib ntdll.lib userenv.lib ws2_32.lib synchronization.lib kernel32.lib ws2_32.lib kernel32.lib msvcrt.lib
-    )
-    set_property(TARGET client PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-ENDIF (WIN32)
-IF (UNIX)
-    message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
-    target_compile_options(client PRIVATE ${sanitizer_flags})
-    target_link_options(client PRIVATE ${sanitizer_flags})
-    target_link_libraries(
-            client
-            debug "${CMAKE_SOURCE_DIR}/target/debug/librustls_ffi.a"
-            optimized "${CMAKE_SOURCE_DIR}/target/release/librustls_ffi.a"
-    )
-    if (CERT_COMPRESSION)
-      target_link_libraries(client m)
-    endif ()
-ENDIF (UNIX)
-IF (APPLE)
-    # TODO
-ENDIF (APPLE)
-
-add_executable(server server.c common.c common.h)
-add_dependencies(server rustls-ffi)
-target_include_directories(server PUBLIC ${CMAKE_SOURCE_DIR}/src)
-IF (WIN32)
-    target_compile_options(server PRIVATE ${sanitizer_flags})
-    target_link_libraries(
-            server
-            debug "${CMAKE_SOURCE_DIR}/target/debug/rustls_ffi.lib"
-            optimized "${CMAKE_SOURCE_DIR}/target/release/rustls_ffi.lib"
-            advapi32.lib bcrypt.lib crypt32.lib cryptnet.lib kernel32.lib ncrypt.lib bcrypt.lib advapi32.lib legacy_stdio_definitions.lib kernel32.lib advapi32.lib kernel32.lib ntdll.lib userenv.lib ws2_32.lib synchronization.lib kernel32.lib ws2_32.lib kernel32.lib msvcrt.lib
-    )
-    set_property(TARGET server PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-ENDIF (WIN32)
-IF (UNIX)
-    target_compile_options(server PRIVATE ${sanitizer_flags})
-    target_link_options(server PRIVATE ${sanitizer_flags})
-    target_link_libraries(
-            server
-            debug "${CMAKE_SOURCE_DIR}/target/debug/librustls_ffi.a"
-            optimized "${CMAKE_SOURCE_DIR}/target/release/librustls_ffi.a"
-    )
-    if (CERT_COMPRESSION)
-      target_link_libraries(server m)
-    endif ()
-ENDIF (UNIX)
-IF (APPLE)
-    # TODO
-ENDIF (APPLE)
+# Add client and server test binary targets
+test_binary(client)
+test_binary(server)
