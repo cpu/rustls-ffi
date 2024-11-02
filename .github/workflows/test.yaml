@@ -43,6 +43,7 @@ jobs:
           - os: ubuntu-latest
             cc: clang
             crypto: aws-lc-rs
+            rust: stable
             cert_compression: on
     steps:
       - name: Checkout sources
