@@ -9,7 +9,7 @@ if (NOT (CRYPTO_PROVIDER STREQUAL "aws-lc-rs" OR CRYPTO_PROVIDER STREQUAL "ring"
     message(FATAL_ERROR "Invalid crypto provider specified: ${CRYPTO_PROVIDER}. Must be 'aws-lc-rs' or 'ring'.")
 endif ()
 
-set(CERT_COMPRESSION "false" CACHE STRING "Whether to enable brotli and zlib certificate compression support")
+option(CERT_COMPRESSION "Enable brotli and zlib certificate compression support")
 
 set(CARGO_FEATURES --no-default-features)
 if (CRYPTO_PROVIDER STREQUAL "aws-lc-rs")
@@ -18,12 +18,9 @@ elseif (CRYPTO_PROVIDER STREQUAL "ring")
     list(APPEND CARGO_FEATURES --features=ring)
 endif ()
 
-
-# TODO(XXX): check if not false, e.g "1" and error... Or use a bool or something? idk?
-if (CERT_COMPRESSION STREQUAL "true")
+if (CERT_COMPRESSION)
     list(APPEND CARGO_FEATURES --features=cert_compression)
 endif ()
-
 
 # By default w/ Makefile or Ninja generators the CMAKE_BUILD_TYPE is ""
 # for the C/C++ tooling. This is annoying so conditionally set it to
@@ -33,7 +30,7 @@ endif ()
 set(default_build_type "Release")
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-  message(STATUS "Using default build type: '${default_build_type}'.")
+  message(STATUS "Using default build type: ${default_build_type}")
   set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE STRING "Choose the type of build." FORCE)
 endif()
 

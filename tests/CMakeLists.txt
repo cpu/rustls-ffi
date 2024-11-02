@@ -5,7 +5,15 @@ IF (WIN32)
             _CRT_NONSTDC_NO_WARNINGS
             ssize_t=int
     )
-ENDIF (WIN32)
+elseif (APPLE)
+  add_link_options(LINKER:-dead_strip)
+elseif (UNIX)
+  add_link_options(LINKER:--gc-sections)
+endif ()
+
+if(UNIX) # Apple counts too
+  add_compile_options(-Werror -Wall -Wextra -Wpedantic)
+endif ()
 
 if (CRYPTO_PROVIDER STREQUAL "aws_lc_rs")
     add_compile_definitions(DEFINE_AWS_LC_RS)
@@ -38,7 +46,7 @@ IF (UNIX)
             debug "${CMAKE_SOURCE_DIR}/target/debug/librustls_ffi.a"
             optimized "${CMAKE_SOURCE_DIR}/target/release/librustls_ffi.a"
     )
-    if (CERT_COMPRESSION STREQUAL "true")
+    if (CERT_COMPRESSION)
       target_link_libraries(client m)
     endif ()
 ENDIF (UNIX)
@@ -67,7 +75,7 @@ IF (UNIX)
             debug "${CMAKE_SOURCE_DIR}/target/debug/librustls_ffi.a"
             optimized "${CMAKE_SOURCE_DIR}/target/release/librustls_ffi.a"
     )
-    if (CERT_COMPRESSION STREQUAL "true")
+    if (CERT_COMPRESSION)
       target_link_libraries(server m)
     endif ()
 ENDIF (UNIX)
