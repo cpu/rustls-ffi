@@ -135,7 +135,7 @@ jobs:
           arch: x64
 
       - name: Configure CMake
-        run: |
+        run: >
           cmake
             -DCRYPTO_PROVIDER="${{ matrix.crypto }}"
             -DCERT_COMPRESSION="${{ matrix.cert_compression }}"
