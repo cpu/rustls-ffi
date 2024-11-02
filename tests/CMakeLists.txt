@@ -42,7 +42,11 @@ function(test_binary target_name)
             "${CMAKE_SOURCE_DIR}/target/release/librustls_ffi.a"
         )
         if(APPLE)
-            target_link_libraries(${target_name} "-framework Foundation" "-framework Security")
+            target_link_libraries(
+                ${target_name}
+                "-framework Foundation"
+                "-framework Security"
+            )
         endif()
         if(CERT_COMPRESSION)
             target_link_libraries(${target_name} m)
@@ -58,9 +62,7 @@ if(WIN32)
         ssize_t=int
     )
 elseif(APPLE) # Check this before UNIX!
-    add_link_options(
-        LINKER:-dead_strip
-    )
+    add_link_options(LINKER:-dead_strip)
 elseif(UNIX)
     add_link_options(LINKER:--gc-sections)
 endif()
@@ -76,10 +78,12 @@ elseif(CRYPTO_PROVIDER STREQUAL "ring")
 endif()
 
 # Set ASAN sanitizer flags conditionally for Debug builds
-if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     # Clang supports some additional undefined behaviour sanitizers that are helpful.
-    set(sanitizer_flags "$<$<CONFIG:Debug>:-fsanitize=address,undefined,unsigned-integer-overflow,local-bounds,implicit-conversion>")
-else ()
+    set(sanitizer_flags
+        "$<$<CONFIG:Debug>:-fsanitize=address,undefined,unsigned-integer-overflow,local-bounds,implicit-conversion>"
+    )
+else()
     # For GCC and MSVC, stick to just ASAN.
     set(sanitizer_flags "$<$<CONFIG:Debug>:-fsanitize=address>")
 endif()
