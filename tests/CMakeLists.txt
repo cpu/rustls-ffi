@@ -6,7 +6,7 @@ IF (WIN32)
             ssize_t=int
     )
 elseif (APPLE)
-  add_link_options(LINKER:-dead_strip)
+  add_link_options(LINKER:-dead_strip -framework Security -framework Foundation)
 elseif (UNIX)
   add_link_options(LINKER:--gc-sections)
 endif ()
