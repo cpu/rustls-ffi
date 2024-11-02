@@ -51,3 +51,12 @@ add_custom_target(
     COMMAND cbindgen > "src/rustls.h"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
+
+add_custom_target(
+    connect-test
+    DEPENDS client
+    COMMAND
+        ${CMAKE_COMMAND} -E env RUSTLS_PLATFORM_VERIFIER=1
+        ${CMAKE_BINARY_DIR}/tests/client example.com 443 /
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+)
