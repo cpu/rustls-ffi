@@ -30,15 +30,17 @@ IF (WIN32)
     set_property(TARGET client PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 ENDIF (WIN32)
 IF (UNIX)
+    message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
     target_compile_options(client PRIVATE ${sanitizer_flags})
     target_link_options(client PRIVATE ${sanitizer_flags})
     target_link_libraries(
             client
             debug "${CMAKE_SOURCE_DIR}/target/debug/librustls_ffi.a"
             optimized "${CMAKE_SOURCE_DIR}/target/release/librustls_ffi.a"
-            # TODO(XXX): only link -lm for cert compression enabled
-            m
     )
+    if (CERT_COMPRESSION STREQUAL "true")
+      target_link_libraries(client m)
+    endif ()
 ENDIF (UNIX)
 IF (APPLE)
     # TODO
@@ -64,9 +66,10 @@ IF (UNIX)
             server
             debug "${CMAKE_SOURCE_DIR}/target/debug/librustls_ffi.a"
             optimized "${CMAKE_SOURCE_DIR}/target/release/librustls_ffi.a"
-            # TODO(XXX): only link -lm for cert compression enabled
-            m
     )
+    if (CERT_COMPRESSION STREQUAL "true")
+      target_link_libraries(server m)
+    endif ()
 ENDIF (UNIX)
 IF (APPLE)
     # TODO

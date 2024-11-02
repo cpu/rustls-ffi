@@ -18,9 +18,24 @@ elseif (CRYPTO_PROVIDER STREQUAL "ring")
     list(APPEND CARGO_FEATURES --features=ring)
 endif ()
 
+
+# TODO(XXX): check if not false, e.g "1" and error... Or use a bool or something? idk?
 if (CERT_COMPRESSION STREQUAL "true")
     list(APPEND CARGO_FEATURES --features=cert_compression)
 endif ()
+
+
+# By default w/ Makefile or Ninja generators the CMAKE_BUILD_TYPE is ""
+# for the C/C++ tooling. This is annoying so conditionally set it to
+# our own default. The `CMAKE_CONFIGURATION_TYPES` check excludes the
+# "multi-config" generators like Visual Studio that use --config and
+# ignore CMAKE_CONFIGURATION_TYPES.
+set(default_build_type "Release")
+
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Using default build type: '${default_build_type}'.")
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE STRING "Choose the type of build." FORCE)
+endif()
 
 add_subdirectory(tests)
 
