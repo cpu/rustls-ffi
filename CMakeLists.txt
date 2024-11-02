@@ -64,44 +64,4 @@ add_custom_target(
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
-add_custom_target(
-    rust-format-fix
-    COMMAND sed -i -e 's/ffi_panic_boundary! {/if true {/g' src/*.rs
-    COMMAND cargo fmt
-    COMMAND sed -i -e 's/if true {/ffi_panic_boundary! {/g' src/*.rs
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-)
-
-add_custom_target(
-    rust-format-check
-    COMMAND sed -i -e 's/ffi_panic_boundary! {/if true {/g' src/*.rs
-    COMMAND cargo fmt --check
-    COMMAND sed -i -e 's/if true {/ffi_panic_boundary! {/g' src/*.rs
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-)
-
-add_custom_target(
-    cmake-format-fix
-    COMMAND
-        gersemi --definitions tests/CMakeLists.txt -i CMakeLists.txt
-        cmake/*.cmake tests/CMakeLists.txt
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-)
-
-add_custom_target(
-    cmake-format-check
-    COMMAND
-        gersemi --definitions tests/CMakeLists.txt -c CMakeLists.txt
-        cmake/*.cmake tests/CMakeLists.txt
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-)
-
-add_custom_target(
-    format-fix
-    DEPENDS rust-format-fix c-format-fix cmake-format-fix
-)
-
-add_custom_target(
-    format-check
-    DEPENDS rust-format-check c-format-check cmake-format-check
-)
+include(cmake/formatting.cmake)

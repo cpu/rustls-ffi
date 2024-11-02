@@ -56,29 +56,6 @@ function(test_binary target_name)
     endif()
 endfunction()
 
-function(add_c_format_targets targets)
-    set(all_sources "")
-    foreach(target ${targets})
-        list(APPEND all_sources $<TARGET_PROPERTY:${target},SOURCES>)
-    endforeach()
-
-    # A fix target that formats the source files in-place.
-    add_custom_target(
-        c-format-fix
-        COMMAND clang-format -i ${all_sources}
-        COMMAND_EXPAND_LISTS
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    )
-
-    # A check target that checks if the source files are formatted correctly.
-    add_custom_target(
-        c-format-check
-        COMMAND clang-format --dry-run -Werror -i ${all_sources}
-        COMMAND_EXPAND_LISTS
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    )
-endfunction()
-
 if(WIN32)
     add_compile_definitions(
         _WIN32_WINNT=0x601
@@ -117,6 +94,3 @@ endif()
 # Add client and server test binary targets
 test_binary(client)
 test_binary(server)
-
-# Add c-format-fix and c-format-check targets for the test binary sourcecode.
-add_c_format_targets("client;server")
