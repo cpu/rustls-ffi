@@ -7,6 +7,7 @@ use pki_types::PrivateKeyDer;
 
 #[cfg(feature = "aws-lc-rs")]
 use rustls::crypto::aws_lc_rs;
+use rustls::crypto::hpke::Hpke;
 #[cfg(feature = "ring")]
 use rustls::crypto::ring;
 use rustls::crypto::CryptoProvider;
@@ -265,6 +266,36 @@ pub extern "C" fn rustls_default_fips_provider() -> *const rustls_crypto_provide
     ffi_panic_boundary! {
         Arc::into_raw(Arc::new(rustls::crypto::default_fips_provider()))
             as *const rustls_crypto_provider
+        }
+}
+
+/// Return the number of supported HPKE suites provided by the `aws-lc-rs` cryptography library.
+///
+/// This can be used in combination with `rustls_aws_lc_rs_hpke_get` to retrieve supported HPKE
+/// suites.
+#[no_mangle]
+#[cfg(feature = "aws-lc-rs")]
+pub extern "C" fn rustls_aws_lc_rs_hpke_len() -> usize {
+    ffi_panic_boundary! {
+        aws_lc_rs::hpke::ALL_SUPPORTED_SUITES.len()
+    }
+}
+
+/// Return a pointer to the HPKE suite at the given index provided by the `aws-lc-rs` cryptography
+/// library.
+///
+/// Returns `NULL` if the index is out of bounds. Use `rustls_aws_lc_rs_hpke_len` to
+/// determine the maximum index.
+///
+/// The caller owns the returned `rustls_hpke` and must free it using `rustls_hpke_free`.
+#[no_mangle]
+#[cfg(feature = "aws-lc-rs")]
+pub extern "C" fn rustls_aws_lc_rs_hpke_get(index: usize) -> *mut rustls_hpke {
+    ffi_panic_boundary! {
+        match aws_lc_rs::hpke::ALL_SUPPORTED_SUITES.get(index) {
+            Some(hpke) => to_boxed_mut_ptr(*hpke),
+            None => core::ptr::null_mut(),
+        }
     }
 }
 
@@ -490,6 +521,70 @@ impl rustls_signing_key {
     }
 }
 
+box_castable! {
+    /// A Hybrid Public Key Encryption (HPKE) suite implementation.
+    ///
+    /// This corresponds to the [Hpke] trait in Rustls.
+    ///
+    /// If you are using the `aws-lc-rs` feature you can retreive supported HPKE
+    /// suites using `rustls_aws_lc_rs_hpke_get()` in combination with
+    /// `rustls_aws_lc_rs_hpke_len()`.
+    ///
+    /// [Hpke]: <https://docs.rs/rustls/latest/rustls/crypto/hpke/trait.Hpke.html>
+    // Since we can't pass a `&dyn` trait fat pointer across the FFI boundary we box
+    // the ref. This gives us a fixed size pointer to pass. We don't need to box an `Arc`
+    // in this case because the ref is `'static`.
+    pub struct rustls_hpke(&'static dyn Hpke);
+}
+
+/// Return the Key Encapsulation Mechanism (`Kem`) type for HPKE operations with the
+/// given suite.
+///
+/// Listed by IANA, as specified in [RFC 9180 Section 7.1]
+///
+/// [RFC 9180 Section 7.1]: <https://datatracker.ietf.org/doc/html/rfc9180#kemid-values>
+#[no_mangle]
+pub extern "C" fn rustls_hpke_kem(hpke: *const rustls_hpke) -> u16 {
+    ffi_panic_boundary! {
+        u16::from(try_ref_from_ptr!(hpke).suite().kem)
+    }
+}
+
+/// The Key Derivation Function (`Kdf`) type for HPKE operations with the
+/// given suite.
+///
+/// Listed by IANA, as specified in [RFC 9180 Section 7.2]
+///
+/// [RFC 9180 Section 7.2]: <https://datatracker.ietf.org/doc/html/rfc9180#name-key-derivation-functions-kd>
+#[no_mangle]
+pub extern "C" fn rustls_hpke_kdf(hpke: *const rustls_hpke) -> u16 {
+    ffi_panic_boundary! {
+        u16::from(try_ref_from_ptr!(hpke).suite().sym.kdf_id)
+    }
+}
+
+/// The Authenticated Encryption with Associated Data (`Aead`) type for HPKE operations with the
+/// given suite.
+///
+/// Listed by IANA, as specified in [RFC 9180 Section 7.3]
+///
+/// [RFC 9180 Section 7.3]: <https://datatracker.ietf.org/doc/html/rfc9180#name-authenticated-encryption-wi>
+#[no_mangle]
+pub extern "C" fn rustls_hpke_aead(hpke: *const rustls_hpke) -> u16 {
+    ffi_panic_boundary! {
+        u16::from(try_ref_from_ptr!(hpke).suite().sym.aead_id)
+    }
+}
+
+/// Frees the `rustls_hpke`. This is safe to call with a `NULL` argument, but
+/// must not be called twice with the same value.
+#[no_mangle]
+pub extern "C" fn rustls_hpke_free(hpke: *mut rustls_hpke) {
+    ffi_panic_boundary! {
+        free_box(hpke)
+    }
+}
+
 pub(crate) fn get_default_or_install_from_crate_features() -> Option<Arc<CryptoProvider>> {
     // If a process-wide default has already been installed, return it.
     if let Some(provider) = CryptoProvider::get_default() {
@@ -567,5 +662,33 @@ mod tests {
         let result = rustls_default_crypto_provider_random(buff.as_mut_ptr(), buff.len());
         assert_eq!(result, rustls_result::Ok);
         assert_ne!(buff, vec![0; 32]);
+    }
+
+    #[cfg(feature = "aws-lc-rs")]
+    #[test]
+    fn test_aws_lc_rs_hpke_suites() {
+        let hpke_len = rustls_aws_lc_rs_hpke_len();
+        assert!(hpke_len > 0);
+
+        let all_suites = aws_lc_rs::hpke::ALL_SUPPORTED_SUITES;
+        for (i, rustls_suite) in all_suites.iter().enumerate().take(hpke_len) {
+            let ffi_suite = rustls_aws_lc_rs_hpke_get(i);
+            assert!(!ffi_suite.is_null());
+
+            assert_eq!(
+                rustls_hpke_kem(ffi_suite),
+                u16::from(rustls_suite.suite().kem)
+            );
+            assert_eq!(
+                rustls_hpke_kdf(ffi_suite),
+                u16::from(rustls_suite.suite().sym.kdf_id)
+            );
+            assert_eq!(
+                rustls_hpke_aead(ffi_suite),
+                u16::from(rustls_suite.suite().sym.aead_id)
+            );
+
+            rustls_hpke_free(ffi_suite);
+        }
     }
 }

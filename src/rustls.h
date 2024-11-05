@@ -283,6 +283,19 @@ typedef struct rustls_crypto_provider rustls_crypto_provider;
 typedef struct rustls_crypto_provider_builder rustls_crypto_provider_builder;
 
 /**
+ * A Hybrid Public Key Encryption (HPKE) suite implementation.
+ *
+ * This corresponds to the [Hpke] trait in Rustls.
+ *
+ * If you are using the `aws-lc-rs` feature you can retreive supported HPKE
+ * suites using `rustls_aws_lc_rs_hpke_get()` in combination with
+ * `rustls_aws_lc_rs_hpke_len()`.
+ *
+ * [Hpke]: <https://docs.rs/rustls/latest/rustls/crypto/hpke/trait.Hpke.html>
+ */
+typedef struct rustls_hpke rustls_hpke;
+
+/**
  * An alias for `struct iovec` from uio.h (on Unix) or `WSABUF` on Windows.
  *
  * You should cast `const struct rustls_iovec *` to `const struct iovec *` on
@@ -2209,6 +2222,29 @@ const struct rustls_crypto_provider *rustls_aws_lc_rs_crypto_provider(void);
 const struct rustls_crypto_provider *rustls_default_fips_provider(void);
 #endif
 
+#if defined(DEFINE_AWS_LC_RS)
+/**
+ * Return the number of supported HPKE suites provided by the `aws-lc-rs` cryptography library.
+ *
+ * This can be used in combination with `rustls_aws_lc_rs_hpke_get` to retrieve supported HPKE
+ * suites.
+ */
+size_t rustls_aws_lc_rs_hpke_len(void);
+#endif
+
+#if defined(DEFINE_AWS_LC_RS)
+/**
+ * Return a pointer to the HPKE suite at the given index provided by the `aws-lc-rs` cryptography
+ * library.
+ *
+ * Returns `NULL` if the index is out of bounds. Use `rustls_aws_lc_rs_hpke_len` to
+ * determine the maximum index.
+ *
+ * The caller owns the returned `rustls_hpke` and must free it using `rustls_hpke_free`.
+ */
+struct rustls_hpke *rustls_aws_lc_rs_hpke_get(size_t index);
+#endif
+
 /**
  * Retrieve a pointer to the process default `rustls_crypto_provider`.
  *
@@ -2326,6 +2362,42 @@ rustls_result rustls_default_crypto_provider_random(uint8_t *buff, size_t len);
  * must not be called twice with the same value.
  */
 void rustls_signing_key_free(struct rustls_signing_key *signing_key);
+
+/**
+ * Return the Key Encapsulation Mechanism (`Kem`) type for HPKE operations with the
+ * given suite.
+ *
+ * Listed by IANA, as specified in [RFC 9180 Section 7.1]
+ *
+ * [RFC 9180 Section 7.1]: <https://datatracker.ietf.org/doc/html/rfc9180#kemid-values>
+ */
+uint16_t rustls_hpke_kem(const struct rustls_hpke *hpke);
+
+/**
+ * The Key Derivation Function (`Kdf`) type for HPKE operations with the
+ * given suite.
+ *
+ * Listed by IANA, as specified in [RFC 9180 Section 7.2]
+ *
+ * [RFC 9180 Section 7.2]: <https://datatracker.ietf.org/doc/html/rfc9180#name-key-derivation-functions-kd>
+ */
+uint16_t rustls_hpke_kdf(const struct rustls_hpke *hpke);
+
+/**
+ * The Authenticated Encryption with Associated Data (`Aead`) type for HPKE operations with the
+ * given suite.
+ *
+ * Listed by IANA, as specified in [RFC 9180 Section 7.3]
+ *
+ * [RFC 9180 Section 7.3]: <https://datatracker.ietf.org/doc/html/rfc9180#name-authenticated-encryption-wi>
+ */
+uint16_t rustls_hpke_aead(const struct rustls_hpke *hpke);
+
+/**
+ * Frees the `rustls_hpke`. This is safe to call with a `NULL` argument, but
+ * must not be called twice with the same value.
+ */
+void rustls_hpke_free(struct rustls_hpke *hpke);
 
 /**
  * Convert a `rustls_handshake_kind` to a string with a friendly description of the kind
