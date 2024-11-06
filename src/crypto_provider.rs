@@ -18,9 +18,9 @@ use crate::cipher::rustls_supported_ciphersuite;
 use crate::error::map_error;
 use crate::{
     arc_castable, box_castable, ffi_panic_boundary, free_arc, free_box, rustls_result,
-    set_arc_mut_ptr, set_boxed_mut_ptr, to_boxed_mut_ptr, try_clone_arc, try_mut_from_ptr,
-    try_mut_from_ptr_ptr, try_ref_from_ptr, try_ref_from_ptr_ptr, try_slice, try_slice_mut,
-    try_take,
+    set_arc_mut_ptr, set_boxed_mut_ptr, to_arc_const_ptr, to_boxed_mut_ptr, try_clone_arc,
+    try_mut_from_ptr, try_mut_from_ptr_ptr, try_ref_from_ptr, try_ref_from_ptr_ptr, try_slice,
+    try_slice_mut, try_take,
 };
 
 box_castable! {
@@ -576,12 +576,109 @@ pub extern "C" fn rustls_hpke_aead(hpke: *const rustls_hpke) -> u16 {
     }
 }
 
+/// Generate a `rustls_hpke_public_key` suitable for ECH GREASE using the provided `rustls_hpke`.
+///
+/// A new `rustls_hpke_public_key` is written to `pk_out` when `RUSTLS_RESULT_OK` is returned.
+/// The caller owns this `rustls_hpke_public_key` and must call `rustls_hpke_public_key_free`.
+/// The lifetime of the `rustls_hpke_public_key` is not tied to the `rustls_hpke` lifetime.
+///
+/// If an error result is returned `pk_out` is unused.
+#[no_mangle]
+pub extern "C" fn rustls_hpke_grease_public_key(
+    hpke: *const rustls_hpke,
+    pk_out: *mut *const rustls_hpke_public_key,
+) -> rustls_result {
+    ffi_panic_boundary! {
+        let suite = try_ref_from_ptr!(hpke);
+        let out = try_ref_from_ptr_ptr!(pk_out);
+
+        // Generate a new keypair and throw away the private key.
+        // In the future we may want a more capable API but there's nothing for
+        // rustls-ffi to do with HPKE private keys at this time.
+        let pk = match suite.generate_key_pair() {
+            Ok((pk, _)) => pk,
+            Err(e) => return map_error(e),
+        };
+        set_arc_mut_ptr(out, pk.0);
+
+        rustls_result::Ok
+    }
+}
+
 /// Frees the `rustls_hpke`. This is safe to call with a `NULL` argument, but
 /// must not be called twice with the same value.
 #[no_mangle]
 pub extern "C" fn rustls_hpke_free(hpke: *mut rustls_hpke) {
     ffi_panic_boundary! {
         free_box(hpke)
+    }
+}
+
+arc_castable! {
+    /// An HPKE public key, suitable for use for ECH GREASE.
+    ///
+    /// An instance can be obtained from a `rustls_hpke` using `rustls_hpke_grease_public_key`,
+    /// or read from an existing DER encoded data using `rustls_hpke_public_key_load`.
+    ///
+    /// Instances must eventually be freed with `rustls_hpke_public_key_free`.
+    pub struct rustls_hpke_public_key(Vec<u8>);
+}
+
+/// Retrieve the DER encoded public key from the `rustls_hpke_public_key`.
+///
+/// Writes a pointer to the public key to `pk_out` and the length of the public key to `pk_out_len`
+/// when the function returns `RUSTLS_RESULT_OK`. The `rustls_hpke_public_key` is not modified
+/// and owns the returned data. The caller **must not** maintain a reference to the data after
+/// the `rustls_hpke_public_key` is freed.
+///
+/// If an error result is returned (for example because a parameter was NULL) the out parameters
+/// are untouched.
+#[no_mangle]
+pub extern "C" fn rustls_hpke_public_key_der(
+    pk: *const rustls_hpke_public_key,
+    pk_out: *mut *const u8,
+    pk_out_len: *mut size_t,
+) -> rustls_result {
+    ffi_panic_boundary! {
+        let pk = try_ref_from_ptr!(pk);
+
+        // We can't use our macros here: u8 and size_t aren't Castable.
+        if pk_out.is_null() || pk_out_len.is_null() {
+            return rustls_result::NullParameter;
+        }
+
+        unsafe {
+            *pk_out = pk.as_ptr();
+            *pk_out_len = pk.len();
+        }
+
+        rustls_result::Ok
+    }
+}
+
+/// Construct a `rustls_hpke_public_key` from existing DER input.
+///
+/// The caller owns the returned `rustls_hpke_public_key` and must free it with
+/// `rustls_hpke_public_key_free`. The ownership of `public_key_der` remains with
+/// the caller.
+///
+/// Returns NULL if `public_key_der` is NULL.
+#[no_mangle]
+pub extern "C" fn rustls_hpke_public_key_load(
+    public_key_der: *const u8,
+    public_key_der_size: size_t,
+) -> *const rustls_hpke_public_key {
+    ffi_panic_boundary! {
+        to_arc_const_ptr(try_slice!(public_key_der, public_key_der_size).to_vec())
+    }
+}
+
+/// Frees the `rustls_hpke_public_key`. This is safe to call with a `NULL` argument, but
+/// must not be called twice with the same value.
+#[no_mangle]
+pub extern "C" fn rustls_hpke_public_key_free(pk: *const rustls_hpke_public_key) {
+    ffi_panic_boundary! {
+        free_arc(pk)
     }
 }
 
@@ -688,6 +785,55 @@ mod tests {
                 u16::from(rustls_suite.suite().sym.aead_id)
             );
 
+            // Giving a bad index should result in NULL.
+            let bad_ffi_suite = rustls_aws_lc_rs_hpke_get(hpke_len + 1);
+            assert!(bad_ffi_suite.is_null());
+
+            // Trying to generate a GREASE public key with a NULL suite should return an error
+            // and leave the out ptr NULL.
+            let mut pubkey = ptr::null();
+            let res = rustls_hpke_grease_public_key(ptr::null(), &mut pubkey);
+            assert_eq!(res, rustls_result::NullParameter);
+            assert!(pubkey.is_null());
+
+            // Similar for using a null out param.
+            let res = rustls_hpke_grease_public_key(ffi_suite, ptr::null_mut());
+            assert_eq!(res, rustls_result::NullParameter);
+
+            // We should be able to generate a real pubkey.
+            let res = rustls_hpke_grease_public_key(ffi_suite, &mut pubkey);
+            assert_eq!(res, rustls_result::Ok);
+
+            // Giving null parameters to rustls_hpke_public_key_der should fail.
+            let mut der_out = ptr::null();
+            let mut der_out_len = 0;
+            let res = rustls_hpke_public_key_der(ptr::null(), &mut der_out, &mut der_out_len);
+            assert_eq!(res, rustls_result::NullParameter);
+            assert!(der_out.is_null());
+            assert_eq!(der_out_len, 0);
+            let res = rustls_hpke_public_key_der(pubkey, ptr::null_mut(), &mut der_out_len);
+            assert_eq!(res, rustls_result::NullParameter);
+            assert_eq!(der_out_len, 0);
+            let res = rustls_hpke_public_key_der(pubkey, &mut der_out, ptr::null_mut());
+            assert_eq!(res, rustls_result::NullParameter);
+            assert!(der_out.is_null());
+
+            // Giving valid parameters should work fine.
+            let res = rustls_hpke_public_key_der(pubkey, &mut der_out, &mut der_out_len);
+            assert_eq!(res, rustls_result::Ok);
+            assert!(!der_out.is_null());
+            assert!(der_out_len > 0);
+
+            // Giving a null parameter to rustls_hpke_public_key_load should return NULL.
+            let new_pubkey = rustls_hpke_public_key_load(ptr::null(), 0);
+            assert!(new_pubkey.is_null());
+
+            // We should be able to load a new public key instance from the DER.
+            let new_pubkey = rustls_hpke_public_key_load(der_out, der_out_len);
+            assert!(!new_pubkey.is_null());
+
+            rustls_hpke_public_key_free(new_pubkey);
+            rustls_hpke_public_key_free(pubkey);
             rustls_hpke_free(ffi_suite);
         }
     }
