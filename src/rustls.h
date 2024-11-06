@@ -62,6 +62,7 @@ enum rustls_result {
   RUSTLS_RESULT_NO_DEFAULT_CRYPTO_PROVIDER = 7016,
   RUSTLS_RESULT_GET_RANDOM_FAILED = 7017,
   RUSTLS_RESULT_NO_CERT_RESOLVER = 7018,
+  RUSTLS_RESULT_BUILDER_INCOMPATIBLE_TLS_VERSIONS = 7019,
   RUSTLS_RESULT_NO_CERTIFICATES_PRESENTED = 7101,
   RUSTLS_RESULT_DECRYPT_ERROR = 7102,
   RUSTLS_RESULT_FAILED_TO_GET_CURRENT_TIME = 7103,
@@ -294,6 +295,16 @@ typedef struct rustls_crypto_provider_builder rustls_crypto_provider_builder;
  * [Hpke]: <https://docs.rs/rustls/latest/rustls/crypto/hpke/trait.Hpke.html>
  */
 typedef struct rustls_hpke rustls_hpke;
+
+/**
+ * An HPKE public key, suitable for use for ECH GREASE.
+ *
+ * An instance can be obtained from a `rustls_hpke` using `rustls_hpke_grease_public_key`,
+ * or read from an existing DER encoded data using `rustls_hpke_public_key_load`.
+ *
+ * Instances must eventually be freed with `rustls_hpke_public_key_free`.
+ */
+typedef struct rustls_hpke_public_key rustls_hpke_public_key;
 
 /**
  * An alias for `struct iovec` from uio.h (on Unix) or `WSABUF` on Windows.
@@ -1754,6 +1765,24 @@ rustls_result rustls_client_config_builder_set_key_log(struct rustls_client_conf
                                                        rustls_keylog_will_log_callback will_log_cb);
 
 /**
+ * Configure the client for GREASE Encrypted Client Hello.
+ *
+ * This is a feature to prevent ossification of the TLS handshake by acting as though
+ * ECH were configured for an imaginary ECH config for the given suite and placeholder
+ * public key.
+ *
+ * The provided `suite` and `placeholder_public_key` must not be NULL or an error will
+ * be returned. The caller maintains ownership of both and should free them when done.
+ *
+ * A `RUSTLS_RESULT_BUILDER_INCOMPATIBLE_TLS_VERSIONS` error is returned if the builder's
+ * TLS versions have been customized via `rustls_client_config_builder_new_custom()`
+ * and the customization isn't "only TLS 1.3". ECH may only be used with TLS 1.3.
+ */
+rustls_result rustls_client_config_builder_enable_ech_grease(struct rustls_client_config_builder *builder,
+                                                             const struct rustls_hpke *suite,
+                                                             const struct rustls_hpke_public_key *placeholder_public_key);
+
+/**
  * Turn a *rustls_client_config_builder (mutable) into a const *rustls_client_config
  * (read-only).
  */
@@ -2394,10 +2423,55 @@ uint16_t rustls_hpke_kdf(const struct rustls_hpke *hpke);
 uint16_t rustls_hpke_aead(const struct rustls_hpke *hpke);
 
 /**
+ * Generate a `rustls_hpke_public_key` suitable for ECH GREASE using the provided `rustls_hpke`.
+ *
+ * A new `rustls_hpke_public_key` is written to `pk_out` when `RUSTLS_RESULT_OK` is returned.
+ * The caller owns this `rustls_hpke_public_key` and must call `rustls_hpke_public_key_free`.
+ * The lifetime of the `rustls_hpke_public_key` is not tied to the `rustls_hpke` lifetime.
+ *
+ * If an error result is returned `pk_out` is unused.
+ */
+rustls_result rustls_hpke_grease_public_key(const struct rustls_hpke *hpke,
+                                            const struct rustls_hpke_public_key **pk_out);
+
+/**
  * Frees the `rustls_hpke`. This is safe to call with a `NULL` argument, but
  * must not be called twice with the same value.
  */
 void rustls_hpke_free(struct rustls_hpke *hpke);
+
+/**
+ * Retrieve the DER encoded public key from the `rustls_hpke_public_key`.
+ *
+ * Writes a pointer to the public key to `pk_out` and the length of the public key to `pk_out_len`
+ * when the function returns `RUSTLS_RESULT_OK`. The `rustls_hpke_public_key` is not modified
+ * and owns the returned data. The caller **must not** maintain a reference to the data after
+ * the `rustls_hpke_public_key` is freed.
+ *
+ * If an error result is returned (for example because a parameter was NULL) the out parameters
+ * are untouched.
+ */
+rustls_result rustls_hpke_public_key_der(const struct rustls_hpke_public_key *pk,
+                                         const uint8_t **pk_out,
+                                         size_t *pk_out_len);
+
+/**
+ * Construct a `rustls_hpke_public_key` from existing DER input.
+ *
+ * The caller owns the returned `rustls_hpke_public_key` and must free it with
+ * `rustls_hpke_public_key_free`. The ownership of `public_key_der` remains with
+ * the caller.
+ *
+ * Returns NULL if `public_key_der` is NULL.
+ */
+const struct rustls_hpke_public_key *rustls_hpke_public_key_load(const uint8_t *public_key_der,
+                                                                 size_t public_key_der_size);
+
+/**
+ * Frees the `rustls_hpke_public_key`. This is safe to call with a `NULL` argument, but
+ * must not be called twice with the same value.
+ */
+void rustls_hpke_public_key_free(const struct rustls_hpke_public_key *pk);
 
 /**
  * Convert a `rustls_handshake_kind` to a string with a friendly description of the kind

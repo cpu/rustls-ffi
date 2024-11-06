@@ -3,19 +3,9 @@ use std::fmt::{Debug, Formatter};
 use std::slice;
 use std::sync::Arc;
 
-use libc::{c_char, size_t};
-use pki_types::{CertificateDer, UnixTime};
-use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::client::ResolvesClientCert;
-use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
-use rustls::{
-    sign::CertifiedKey, ClientConfig, ClientConnection, DigitallySignedStruct, Error, KeyLog,
-    KeyLogFile, ProtocolVersion, SignatureScheme, SupportedProtocolVersion,
-};
-
 use crate::cipher::{rustls_certified_key, rustls_server_cert_verifier};
 use crate::connection::{rustls_connection, Connection};
-use crate::crypto_provider::rustls_crypto_provider;
+use crate::crypto_provider::{rustls_crypto_provider, rustls_hpke, rustls_hpke_public_key};
 use crate::error::rustls_result::{InvalidParameter, NullParameter};
 use crate::error::{self, map_error, rustls_result};
 use crate::keylog::{rustls_keylog_log_callback, rustls_keylog_will_log_callback, CallbackKeyLog};
@@ -26,6 +16,16 @@ use crate::{
     set_arc_mut_ptr, set_boxed_mut_ptr, to_boxed_mut_ptr, try_box_from_ptr, try_clone_arc,
     try_mut_from_ptr, try_mut_from_ptr_ptr, try_ref_from_ptr, try_ref_from_ptr_ptr, try_slice,
     userdata_get,
+};
+use libc::{c_char, size_t};
+use pki_types::{CertificateDer, UnixTime};
+use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
+use rustls::client::{EchGreaseConfig, EchMode, ResolvesClientCert};
+use rustls::crypto::hpke::HpkePublicKey;
+use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
+use rustls::{
+    sign::CertifiedKey, ClientConfig, ClientConnection, DigitallySignedStruct, Error, KeyLog,
+    KeyLogFile, ProtocolVersion, SignatureScheme, SupportedProtocolVersion,
 };
 
 box_castable! {
@@ -52,6 +52,7 @@ pub(crate) struct ClientConfigBuilder {
     enable_sni: bool,
     cert_resolver: Option<Arc<dyn ResolvesClientCert>>,
     key_log: Option<Arc<dyn KeyLog>>,
+    ech_mode: Option<EchMode>,
 }
 
 impl Default for ClientConfigBuilder {
@@ -69,6 +70,7 @@ impl Default for ClientConfigBuilder {
             enable_sni: true,
             cert_resolver: None,
             key_log: None,
+            ech_mode: None,
         }
     }
 }
@@ -367,6 +369,41 @@ impl rustls_client_config_builder {
         }
     }
 
+    /// Configure the client for GREASE Encrypted Client Hello.
+    ///
+    /// This is a feature to prevent ossification of the TLS handshake by acting as though
+    /// ECH were configured for an imaginary ECH config for the given suite and placeholder
+    /// public key.
+    ///
+    /// The provided `suite` and `placeholder_public_key` must not be NULL or an error will
+    /// be returned. The caller maintains ownership of both and should free them when done.
+    ///
+    /// A `RUSTLS_RESULT_BUILDER_INCOMPATIBLE_TLS_VERSIONS` error is returned if the builder's
+    /// TLS versions have been customized via `rustls_client_config_builder_new_custom()`
+    /// and the customization isn't "only TLS 1.3". ECH may only be used with TLS 1.3.
+    #[no_mangle]
+    pub extern "C" fn rustls_client_config_builder_enable_ech_grease(
+        builder: *mut rustls_client_config_builder,
+        suite: *const rustls_hpke,
+        placeholder_public_key: *const rustls_hpke_public_key,
+    ) -> rustls_result {
+        ffi_panic_boundary! {
+            let builder = try_mut_from_ptr!(builder);
+            let suite = try_ref_from_ptr!(suite);
+            let placeholder_pk = HpkePublicKey(try_ref_from_ptr!(placeholder_public_key).clone());
+            // If the builder's TLS versions have been customized, and the customization
+            // isn't "only TLS 1.3", return an error.
+            if !builder.versions.is_empty() && builder.versions != [&rustls::version::TLS13] {
+                return rustls_result::BuilderIncompatibleTlsVersions;
+            }
+            builder.ech_mode = Some(EchMode::Grease(EchGreaseConfig::new(
+                *suite,
+                placeholder_pk,
+            )));
+            rustls_result::Ok
+        }
+    }
+
     /// Turn a *rustls_client_config_builder (mutable) into a const *rustls_client_config
     /// (read-only).
     #[no_mangle]
@@ -388,19 +425,32 @@ impl rustls_client_config_builder {
                 None => return rustls_result::NoServerCertVerifier,
             };
 
-            let versions = match builder.versions.is_empty() {
-                true => rustls::DEFAULT_VERSIONS,
-                false => builder.versions.as_slice(),
-            };
+            let config = ClientConfig::builder_with_provider(provider);
 
-            let config = match ClientConfig::builder_with_provider(provider)
-                .with_protocol_versions(versions)
-            {
-                Ok(c) => c,
-                Err(err) => return map_error(err),
-            };
+            // ECH configuration is mutually exclusive with customizing protocol versions.
+            //
+            // The upstream builder API is written such that calling `with_ech()` transitions
+            // the builder directly to `WantsVerifier`, skipping protocol customization to
+            // ensure the protocols are compatible with the ECH mode. C makes it harder to
+            // express that, so we enforce this at the time of populating `builder.ech_mode`.
+            let wants_verifier;
+            if let Some(ech_mode) = builder.ech_mode {
+                wants_verifier = match config.with_ech(ech_mode) {
+                    Ok(config) => config,
+                    Err(err) => return map_error(err),
+                }
+            } else {
+                let versions = match builder.versions.is_empty() {
+                    true => rustls::DEFAULT_VERSIONS,
+                    false => builder.versions.as_slice(),
+                };
+                wants_verifier = match config.with_protocol_versions(versions) {
+                    Ok(config) => config,
+                    Err(err) => return map_error(err),
+                };
+            }
 
-            let config = config
+            let config = wants_verifier
                 .dangerous()
                 .with_custom_certificate_verifier(verifier);
             let mut config = match builder.cert_resolver {
@@ -679,6 +729,12 @@ mod tests {
 
     use super::*;
 
+    #[cfg(feature = "aws-lc-rs")]
+    use crate::crypto_provider::{
+        rustls_aws_lc_rs_crypto_provider, rustls_aws_lc_rs_hpke_get, rustls_crypto_provider_free,
+        rustls_hpke_free, rustls_hpke_public_key_free, rustls_hpke_public_key_load,
+    };
+
     #[test]
     fn test_config_builder() {
         let builder = rustls_client_config_builder::rustls_client_config_builder_new();
@@ -810,5 +866,94 @@ mod tests {
         let result =
             rustls_client_config_builder::rustls_client_config_builder_build(builder, &mut config);
         assert_eq!(result, rustls_result::NoServerCertVerifier);
+    }
+
+    #[cfg(feature = "aws-lc-rs")] // Ring does not offer HPKE at this time.
+    #[test]
+    fn test_client_builder_ech_grease() {
+        let provider = rustls_aws_lc_rs_crypto_provider();
+        assert!(!provider.is_null());
+
+        let mut builder_out = null_mut();
+        // NOTE: Includes TLS 1.2, should cause an error later when we try to config ECH.
+        let bad_protos = rustls::DEFAULT_VERSIONS
+            .iter()
+            .map(|p| u16::from(p.version))
+            .collect::<Vec<_>>();
+
+        let result = rustls_client_config_builder::rustls_client_config_builder_new_custom(
+            provider,
+            bad_protos.as_ptr(),
+            bad_protos.len(),
+            &mut builder_out,
+        );
+        assert_eq!(result, rustls_result::Ok);
+        assert!(!builder_out.is_null());
+
+        let suite = rustls_aws_lc_rs_hpke_get(0);
+        assert!(!suite.is_null());
+
+        // Use a random pre-generated key for testing - `rustls_hpke_grease_public_key()` will
+        // use aws-lc-rs APIs that Miri won't support.
+        let pubkey_der = [
+            4, 118, 82, 28, 142, 182, 26, 113, 130, 114, 93, 32, 12, 20, 54, 12, 100, 207, 117,
+            194, 80, 114, 137, 221, 90, 185, 238, 46, 83, 110, 72, 92, 247, 200, 129, 47, 53, 252,
+            222, 175, 215, 7, 172, 121, 108, 84, 66, 69, 59, 219, 58, 111, 51, 108, 253, 160, 11,
+            57, 105, 0, 201, 35, 193, 90, 184,
+        ];
+
+        let pubkey_out = rustls_hpke_public_key_load(pubkey_der.as_ptr(), pubkey_der.len());
+        assert_eq!(result, rustls_result::Ok);
+        assert!(!pubkey_out.is_null());
+
+        // Trying to configure ECH GREASE should error based on the protocol customization of the
+        // builder.
+        let result = rustls_client_config_builder::rustls_client_config_builder_enable_ech_grease(
+            builder_out,
+            suite,
+            pubkey_out,
+        );
+        assert_eq!(result, rustls_result::BuilderIncompatibleTlsVersions);
+
+        rustls_client_config_builder::rustls_client_config_builder_free(builder_out);
+
+        // Create a new builder, and customize it for TLS 1.3 only.
+        let mut builder_out = null_mut();
+        let good_protos = [u16::from(rustls::version::TLS13.version)];
+
+        let result = rustls_client_config_builder::rustls_client_config_builder_new_custom(
+            provider,
+            good_protos.as_ptr(),
+            good_protos.len(),
+            &mut builder_out,
+        );
+        assert_eq!(result, rustls_result::Ok);
+        assert!(!builder_out.is_null());
+
+        // Configuring this builder for GREASE ECH should succeed.
+        let result = rustls_client_config_builder::rustls_client_config_builder_enable_ech_grease(
+            builder_out,
+            suite,
+            pubkey_out,
+        );
+        assert_eq!(result, rustls_result::Ok);
+
+        rustls_client_config_builder::rustls_client_config_builder_free(builder_out);
+
+        // A default client config should allow ECH GREASE as well.
+        let builder_out = rustls_client_config_builder::rustls_client_config_builder_new();
+        assert!(!builder_out.is_null());
+
+        let result = rustls_client_config_builder::rustls_client_config_builder_enable_ech_grease(
+            builder_out,
+            suite,
+            pubkey_out,
+        );
+        assert_eq!(result, rustls_result::Ok);
+
+        rustls_client_config_builder::rustls_client_config_builder_free(builder_out);
+        rustls_hpke_free(suite);
+        rustls_hpke_public_key_free(pubkey_out);
+        rustls_crypto_provider_free(provider);
     }
 }

@@ -67,6 +67,7 @@ u32_enum_builder! {
         NoDefaultCryptoProvider => 7016,
         GetRandomFailed => 7017,
         NoCertResolver => 7018,
+        BuilderIncompatibleTlsVersions => 7019,
 
         // From https://docs.rs/rustls/latest/rustls/enum.Error.html
         NoCertificatesPresented => 7101,
@@ -522,6 +523,9 @@ impl Display for rustls_result {
             }
             NoCertResolver => {
                 write!(f, "no certificate resolver was configured")
+            }
+            BuilderIncompatibleTlsVersions => {
+                write!(f, "the client config builder specifies incompatible TLS versions for the requested feature")
             }
 
             CertEncodingBad => Error::InvalidCertificate(CertificateError::BadEncoding).fmt(f),
