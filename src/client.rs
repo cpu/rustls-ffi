@@ -13,14 +13,14 @@ use crate::rslice::NulByte;
 use crate::rslice::{rustls_slice_bytes, rustls_slice_slice_bytes, rustls_str};
 use crate::{
     arc_castable, box_castable, crypto_provider, ffi_panic_boundary, free_arc, free_box,
-    set_arc_mut_ptr, set_boxed_mut_ptr, to_boxed_mut_ptr, try_box_from_ptr, try_clone_arc,
-    try_mut_from_ptr, try_mut_from_ptr_ptr, try_ref_from_ptr, try_ref_from_ptr_ptr, try_slice,
-    userdata_get,
+    set_arc_mut_ptr, set_boxed_mut_ptr, to_boxed_mut_ptr, try_box_from, try_box_from_ptr,
+    try_clone_arc, try_mut_from_ptr, try_mut_from_ptr_ptr, try_ref_from_ptr, try_ref_from_ptr_ptr,
+    try_slice, userdata_get,
 };
 use libc::{c_char, size_t};
-use pki_types::{CertificateDer, UnixTime};
+use pki_types::{CertificateDer, EchConfigListBytes, UnixTime};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::client::{EchGreaseConfig, EchMode, ResolvesClientCert};
+use rustls::client::{EchConfig, EchGreaseConfig, EchMode, ResolvesClientCert};
 use rustls::crypto::hpke::HpkePublicKey;
 use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
 use rustls::{
@@ -369,11 +369,15 @@ impl rustls_client_config_builder {
         }
     }
 
-    /// Configure the client for GREASE Encrypted Client Hello.
+    /// Configure the client for GREASE Encrypted Client Hello (ECH).
     ///
     /// This is a feature to prevent ossification of the TLS handshake by acting as though
     /// ECH were configured for an imaginary ECH config for the given suite and placeholder
     /// public key.
+    ///
+    /// Calling this function will replace any existing ECH configuration set by
+    /// previous calls to `rustls_client_config_builder_enable_ech()` or
+    /// `rustls_client_config_builder_enable_ech_grease()`.
     ///
     /// The provided `suite` and `placeholder_public_key` must not be NULL or an error will
     /// be returned. The caller maintains ownership of both and should free them when done.
@@ -400,6 +404,85 @@ impl rustls_client_config_builder {
                 *suite,
                 placeholder_pk,
             )));
+            rustls_result::Ok
+        }
+    }
+
+    /// Configure the client for Encrypted Client Hello (ECH).
+    ///
+    /// This requires providing a DER encoded list of ECH configurations that should
+    /// have been retrieved from the DNS HTTPS record for the domain you intend to connect to.
+    /// This should be done using DNS-over-HTTPS to avoid leaking the domain name you are
+    /// connecting to ahead of the TLS handshake.
+    ///
+    /// Additionally, you must provide a list of supported HPKE suites. If you are using
+    /// `aws-lc-rs` these can be retreived using `rustls_aws_lc_rs_hpke_len()` and
+    /// `rustls_aws_lc_rs_hpke_get()`. An error will be returned if none of the provided
+    /// HPKE suites are compatible with an ECH config from the config list.
+    ///
+    /// Calling this function will replace any existing ECH configuration set by
+    /// previous calls to `rustls_client_config_builder_enable_ech()` or
+    /// `rustls_client_config_builder_enable_ech_grease()`.
+    ///
+    /// The provided `ech_config_list_der` and `supported_hpke_suites` must not be NULL or an
+    /// error will be returned. The caller maintains ownership of the ECH config list DER but
+    /// the `supported_hpke_suites` are consumed and the caller should not free or reference
+    /// them further.
+    ///
+    /// A `RUSTLS_RESULT_BUILDER_INCOMPATIBLE_TLS_VERSIONS` error is returned if the builder's
+    /// TLS versions have been customized via `rustls_client_config_builder_new_custom()`
+    /// and the customization isn't "only TLS 1.3". ECH may only be used with TLS 1.3.
+    #[no_mangle]
+    pub extern "C" fn rustls_client_config_builder_enable_ech(
+        builder: *mut rustls_client_config_builder,
+        ech_config_list_der: *const u8,
+        ech_config_list_der_size: size_t,
+        supported_hpke_suites: *const *mut rustls_hpke,
+        supported_hpke_suites_size: size_t,
+    ) -> rustls_result {
+        ffi_panic_boundary! {
+            let builder = try_mut_from_ptr!(builder);
+            let ech_config_list_der = try_slice!(ech_config_list_der, ech_config_list_der_size);
+            let suites = try_slice!(supported_hpke_suites, supported_hpke_suites_size);
+            // If the builder's TLS versions have been customized, and the customization
+            // isn't "only TLS 1.3", return an error.
+            if !builder.versions.is_empty() && builder.versions != [&rustls::version::TLS13] {
+                return rustls_result::BuilderIncompatibleTlsVersions;
+            }
+            // Peel out a &'static dyn Hpke per suite, or an error result if any of the
+            // *mut rustls_hpke pointers were NULL.
+            let rustls_suites = suites
+                .iter()
+                .map(|suite| {
+                    // NOTE: we don't use the macros here: we aren't in a context that can
+                    // return a rustls_result ergonomically. Instead ,we return an empty err
+                    // and translate to rustls_result from the first error after-wards.
+                    match try_box_from(*suite) {
+                        Some(suite) => Ok(*suite),
+                        None => Err(()),
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>();
+            let rustls_suites = match rustls_suites {
+                Ok(rustls_suites) => rustls_suites,
+                Err(_) => return NullParameter,
+            };
+
+            // Construct an ECH config given the config list DER and our supported suites, or an
+            // error result if the ECH config is no good, or we don't have an HPKE suite that's
+            // compatible with any of the ECH configs in the list.
+            builder.ech_mode = match EchConfig::new(
+                EchConfigListBytes::from(ech_config_list_der),
+                rustls_suites.as_slice(),
+            ) {
+                Ok(ech_config) => Some(ech_config.into()),
+                Err(err) => {
+                    // At this point we have taken ownership of the HPKE suites from `try_box_from`
+                    // and so must free them before returning an error.
+                    return map_error(err);
+                }
+            };
+
             rustls_result::Ok
         }
     }
@@ -731,8 +814,9 @@ mod tests {
 
     #[cfg(feature = "aws-lc-rs")]
     use crate::crypto_provider::{
-        rustls_aws_lc_rs_crypto_provider, rustls_aws_lc_rs_hpke_get, rustls_crypto_provider_free,
-        rustls_hpke_free, rustls_hpke_public_key_free, rustls_hpke_public_key_load,
+        rustls_aws_lc_rs_crypto_provider, rustls_aws_lc_rs_hpke_get, rustls_aws_lc_rs_hpke_len,
+        rustls_crypto_provider_free, rustls_hpke_free, rustls_hpke_public_key_free,
+        rustls_hpke_public_key_load,
     };
 
     #[test]
@@ -955,5 +1039,111 @@ mod tests {
         rustls_hpke_free(suite);
         rustls_hpke_public_key_free(pubkey_out);
         rustls_crypto_provider_free(provider);
+    }
+
+    #[cfg(feature = "aws-lc-rs")] // Ring does not offer HPKE at this time.
+    #[test]
+    fn test_client_builder_ech_enabled() {
+        let provider = rustls_aws_lc_rs_crypto_provider();
+        assert!(!provider.is_null());
+
+        let mut builder_out = null_mut();
+        // NOTE: Includes TLS 1.2, should cause an error later when we try to config ECH.
+        let bad_protos = rustls::DEFAULT_VERSIONS
+            .iter()
+            .map(|p| u16::from(p.version))
+            .collect::<Vec<_>>();
+
+        let result = rustls_client_config_builder::rustls_client_config_builder_new_custom(
+            provider,
+            bad_protos.as_ptr(),
+            bad_protos.len(),
+            &mut builder_out,
+        );
+        assert_eq!(result, rustls_result::Ok);
+        assert!(!builder_out.is_null());
+
+        // An ECH config list with one config, for the public name `localhost`.
+        // The one config specifies a key config with one supported KEM (DHKEM_X25519_HKDF_SHA256)
+        // and two supported symmetric ciphersuites (HKDF-SHA256 and AES-128-GCM, or
+        // HKDF-SHA256 and CHACHA20_POLY1305).
+        //
+        // Taken from rustls/rustls/tests/ech.rs's `BASE64_ECHCONFIG_LIST_LOCALHOST` and
+        // base64 decoded to raw DER.
+        let config_list_der = [
+            0, 64, 254, 13, 0, 60, 0, 0, 32, 0, 32, 49, 160, 130, 114, 87, 126, 162, 14, 87, 197,
+            70, 106, 132, 250, 26, 54, 63, 21, 196, 208, 66, 18, 61, 245, 20, 37, 130, 130, 203,
+            164, 252, 87, 0, 8, 0, 1, 0, 1, 0, 1, 0, 3, 128, 9, 108, 111, 99, 97, 108, 104, 111,
+            115, 116, 0, 0,
+        ];
+        let supported_suites = supported_suites_list();
+
+        // Trying to configure ECH GREASE should error based on the protocol customization of the
+        // builder.
+        let result = rustls_client_config_builder::rustls_client_config_builder_enable_ech(
+            builder_out,
+            config_list_der.as_ptr(),
+            config_list_der.len(),
+            supported_suites.as_ptr(),
+            supported_suites.len(),
+        );
+        assert_eq!(result, rustls_result::BuilderIncompatibleTlsVersions);
+
+        rustls_client_config_builder::rustls_client_config_builder_free(builder_out);
+
+        // Create a new builder, and customize it for TLS 1.3 only.
+        let mut builder_out = null_mut();
+        let good_protos = [u16::from(rustls::version::TLS13.version)];
+
+        let result = rustls_client_config_builder::rustls_client_config_builder_new_custom(
+            provider,
+            good_protos.as_ptr(),
+            good_protos.len(),
+            &mut builder_out,
+        );
+        assert_eq!(result, rustls_result::Ok);
+        assert!(!builder_out.is_null());
+
+        // Configuring this builder for ECH should succeed.
+        let result = rustls_client_config_builder::rustls_client_config_builder_enable_ech(
+            builder_out,
+            config_list_der.as_ptr(),
+            config_list_der.len(),
+            supported_suites.as_ptr(),
+            supported_suites.len(),
+        );
+        assert_eq!(result, rustls_result::Ok);
+
+        rustls_client_config_builder::rustls_client_config_builder_free(builder_out);
+
+        // The successful `enable_ech()` above will have consumed our suites, so make new ones.
+        let supported_suites = supported_suites_list();
+
+        // A default client config should allow ECH as well.
+        let builder_out = rustls_client_config_builder::rustls_client_config_builder_new();
+        assert!(!builder_out.is_null());
+
+        let result = rustls_client_config_builder::rustls_client_config_builder_enable_ech(
+            builder_out,
+            config_list_der.as_ptr(),
+            config_list_der.len(),
+            supported_suites.as_ptr(),
+            supported_suites.len(),
+        );
+        assert_eq!(result, rustls_result::Ok);
+
+        rustls_client_config_builder::rustls_client_config_builder_free(builder_out);
+        rustls_crypto_provider_free(provider);
+    }
+
+    #[cfg(feature = "aws-lc-rs")] // Ring does not offer HPKE at this time.
+    fn supported_suites_list() -> Vec<*mut rustls_hpke> {
+        let mut supported_suites = Vec::new();
+        for i in 0..rustls_aws_lc_rs_hpke_len() {
+            let suite = rustls_aws_lc_rs_hpke_get(i);
+            assert!(!suite.is_null());
+            supported_suites.push(suite);
+        }
+        supported_suites
     }
 }
