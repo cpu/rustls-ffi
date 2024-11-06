@@ -4,9 +4,9 @@ use std::slice;
 use std::sync::Arc;
 
 use libc::{c_char, size_t};
-use pki_types::{CertificateDer, UnixTime};
+use pki_types::{CertificateDer, EchConfigListBytes, UnixTime};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::client::ResolvesClientCert;
+use rustls::client::{EchConfig, EchMode, ResolvesClientCert};
 use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
 use rustls::{
     sign::CertifiedKey, ClientConfig, ClientConnection, DigitallySignedStruct, Error, KeyLog,
@@ -15,7 +15,7 @@ use rustls::{
 
 use crate::cipher::{rustls_certified_key, rustls_server_cert_verifier};
 use crate::connection::{rustls_connection, Connection};
-use crate::crypto_provider::rustls_crypto_provider;
+use crate::crypto_provider::{rustls_crypto_provider, rustls_hpke};
 use crate::error::rustls_result::{InvalidParameter, NullParameter};
 use crate::error::{self, map_error, rustls_result};
 use crate::keylog::{rustls_keylog_log_callback, rustls_keylog_will_log_callback, CallbackKeyLog};
@@ -23,9 +23,9 @@ use crate::rslice::NulByte;
 use crate::rslice::{rustls_slice_bytes, rustls_slice_slice_bytes, rustls_str};
 use crate::{
     arc_castable, box_castable, crypto_provider, ffi_panic_boundary, free_arc, free_box,
-    set_arc_mut_ptr, set_boxed_mut_ptr, to_boxed_mut_ptr, try_box_from_ptr, try_clone_arc,
-    try_mut_from_ptr, try_mut_from_ptr_ptr, try_ref_from_ptr, try_ref_from_ptr_ptr, try_slice,
-    userdata_get,
+    set_arc_mut_ptr, set_boxed_mut_ptr, to_boxed_mut_ptr, try_box_from, try_box_from_ptr,
+    try_clone_arc, try_mut_from_ptr, try_mut_from_ptr_ptr, try_ref_from_ptr, try_ref_from_ptr_ptr,
+    try_slice, userdata_get,
 };
 
 box_castable! {
@@ -52,18 +52,20 @@ pub(crate) struct ClientConfigBuilder {
     enable_sni: bool,
     cert_resolver: Option<Arc<dyn ResolvesClientCert>>,
     key_log: Option<Arc<dyn KeyLog>>,
+    ech_mode: Option<EchMode>,
 }
 
 impl Default for ClientConfigBuilder {
     fn default() -> Self {
         Self {
             provider: None,
-            versions: rustls::DEFAULT_VERSIONS.to_vec(),
+            versions: Vec::new(),
             verifier: None,
-            cert_resolver: None,
             alpn_protocols: Vec::new(),
             enable_sni: true,
+            cert_resolver: None,
             key_log: None,
+            ech_mode: None,
         }
     }
 }
@@ -362,6 +364,58 @@ impl rustls_client_config_builder {
         }
     }
 
+    #[no_mangle]
+    pub extern "C" fn rustls_client_config_builder_enable_ech(
+        builder: *mut rustls_client_config_builder,
+        ech_config_list_der: *const u8,
+        ech_config_list_der_size: size_t,
+        supported_hpke_suites: *const *mut rustls_hpke,
+        supported_hpke_suites_size: size_t,
+    ) -> rustls_result {
+        ffi_panic_boundary! {
+            let builder = try_mut_from_ptr!(builder);
+            let ech_config_list_der = try_slice!(ech_config_list_der, ech_config_list_der_size);
+            let suites = try_slice!(supported_hpke_suites, supported_hpke_suites_size);
+
+            // If the builder's TLS versions have been customized, and the customization
+            // isn't "only TLS 1.3", return an error.
+            if !builder.versions.is_empty() && builder.versions != [&rustls::version::TLS13] {
+                return rustls_result::BuilderIncompatibleTlsVersions;
+            }
+
+            // Peel out a &'static dyn Hpke per suite, or an error result if any of the
+            // *mut rustls_hpke pointers were NULL.
+            let rustls_suites = suites
+                .iter()
+                .map(|suite| {
+                    // TODO(@cpu): improve try_box_from to allow *suite as arg.
+                    let suite = *suite;
+                    match try_box_from(suite) {
+                        Some(suite) => Ok(*suite),
+                        None => Err(()),
+                    }
+                })
+                .collect::<Result<Vec<_>, _>>();
+            let rustls_suites = match rustls_suites {
+                Ok(rustls_suites) => rustls_suites,
+                Err(_) => return NullParameter,
+            };
+
+            // Construct an ECH config given the config list DER and our supported suites, or an
+            // error result if the ECH config is no good, or we don't have an HPKE suite that's
+            // compatible with any of the ECH configs in the list.
+            builder.ech_mode = match EchConfig::new(
+                EchConfigListBytes::from(ech_config_list_der),
+                rustls_suites.as_slice(),
+            ) {
+                Ok(ech_config) => Some(ech_config.into()),
+                Err(err) => return map_error(err),
+            };
+
+            rustls_result::Ok
+        }
+    }
+
     /// Turn a *rustls_client_config_builder (mutable) into a const *rustls_client_config
     /// (read-only).
     #[no_mangle]
@@ -383,14 +437,26 @@ impl rustls_client_config_builder {
                 None => return rustls_result::NoServerCertVerifier,
             };
 
-            let config = match ClientConfig::builder_with_provider(provider)
-                .with_protocol_versions(&builder.versions)
-            {
-                Ok(c) => c,
-                Err(err) => return map_error(err),
-            };
+            let config = ClientConfig::builder_with_provider(provider);
 
-            let config = config
+            let wants_verifier;
+            if let Some(ech_mode) = builder.ech_mode {
+                wants_verifier = match config.with_ech(ech_mode) {
+                    Ok(config) => config,
+                    Err(err) => return map_error(err),
+                }
+            } else {
+                let versions = match builder.versions.is_empty() {
+                    true => rustls::DEFAULT_VERSIONS,
+                    false => &builder.versions,
+                };
+                wants_verifier = match config.with_protocol_versions(versions) {
+                    Ok(config) => config,
+                    Err(err) => return map_error(err),
+                };
+            }
+
+            let config = wants_verifier
                 .dangerous()
                 .with_custom_certificate_verifier(verifier);
             let mut config = match builder.cert_resolver {

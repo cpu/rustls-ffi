@@ -62,6 +62,7 @@ enum rustls_result {
   RUSTLS_RESULT_NO_DEFAULT_CRYPTO_PROVIDER = 7016,
   RUSTLS_RESULT_GET_RANDOM_FAILED = 7017,
   RUSTLS_RESULT_NO_CERT_RESOLVER = 7018,
+  RUSTLS_RESULT_BUILDER_INCOMPATIBLE_TLS_VERSIONS = 7019,
   RUSTLS_RESULT_NO_CERTIFICATES_PRESENTED = 7101,
   RUSTLS_RESULT_DECRYPT_ERROR = 7102,
   RUSTLS_RESULT_FAILED_TO_GET_CURRENT_TIME = 7103,
@@ -1752,6 +1753,12 @@ rustls_result rustls_client_config_builder_set_key_log_file(struct rustls_client
 rustls_result rustls_client_config_builder_set_key_log(struct rustls_client_config_builder *builder,
                                                        rustls_keylog_log_callback log_cb,
                                                        rustls_keylog_will_log_callback will_log_cb);
+
+rustls_result rustls_client_config_builder_enable_ech(struct rustls_client_config_builder *builder,
+                                                      const uint8_t *ech_config_list_der,
+                                                      size_t ech_config_list_der_size,
+                                                      struct rustls_hpke *const *supported_hpke_suites,
+                                                      size_t supported_hpke_suites_size);
 
 /**
  * Turn a *rustls_client_config_builder (mutable) into a const *rustls_client_config
