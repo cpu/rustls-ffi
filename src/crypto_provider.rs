@@ -18,9 +18,9 @@ use crate::cipher::rustls_supported_ciphersuite;
 use crate::error::map_error;
 use crate::{
     arc_castable, box_castable, ffi_panic_boundary, free_arc, free_box, rustls_result,
-    set_arc_mut_ptr, set_boxed_mut_ptr, to_boxed_mut_ptr, try_clone_arc, try_mut_from_ptr,
-    try_mut_from_ptr_ptr, try_ref_from_ptr, try_ref_from_ptr_ptr, try_slice, try_slice_mut,
-    try_take,
+    set_arc_mut_ptr, set_boxed_mut_ptr, to_arc_const_ptr, to_boxed_mut_ptr, try_clone_arc,
+    try_mut_from_ptr, try_mut_from_ptr_ptr, try_ref_from_ptr, try_ref_from_ptr_ptr, try_slice,
+    try_slice_mut, try_take,
 };
 
 box_castable! {
@@ -543,12 +543,69 @@ pub extern "C" fn rustls_hpke_aead(hpke: *const rustls_hpke) -> u16 {
     }
 }
 
+/// Generate a `rustls_hpke_public_key` suitable for ECH GREASE using the provided `rustls_hpke`.
+///
+/// A new `rustls_hpke_public_key` is written to `pk_out` when `RUSTLS_RESULT_OK` is returned.
+/// The caller owns this `rustls_hpke_public_key` and must call `rustls_hpke_public_key_free`.
+///
+/// If an error result is returned `pk_out` is unused.
+#[no_mangle]
+pub extern "C" fn rustls_hpke_grease_public_key(
+    hpke: *const rustls_hpke,
+    pk_out: *mut *const rustls_hpke_public_key,
+) -> rustls_result {
+    ffi_panic_boundary! {
+        let suite = try_ref_from_ptr!(hpke);
+        let out = try_ref_from_ptr_ptr!(pk_out);
+
+        // Generate a new keypair and throw away the private key.
+        let pk = match suite.generate_key_pair() {
+            Ok((pk, _)) => pk,
+            Err(e) => return map_error(e),
+        };
+        set_arc_mut_ptr(out, pk.0);
+
+        rustls_result::Ok
+    }
+}
+
 /// Frees the `rustls_hpke`. This is safe to call with a `NULL` argument, but
 /// must not be called twice with the same value.
 #[no_mangle]
 pub extern "C" fn rustls_hpke_free(hpke: *mut rustls_hpke) {
     ffi_panic_boundary! {
         free_box(hpke)
+    }
+}
+
+arc_castable! {
+    /// An HPKE public key, suitable for use for ECH GREASE.
+    pub struct rustls_hpke_public_key(Vec<u8>);
+}
+
+/// Construct a `rustls_hpke_public_key` from existing DER input.
+///
+/// The caller owns the returned `rustls_hpke_public_key` and must free it with
+/// `rustls_hpke_public_key_free`. The ownership of `public_key_der` remains with
+/// the caller.
+///
+/// Returns NULL if `public_key_der` is NULL.
+#[no_mangle]
+pub extern "C" fn rustls_hpke_public_key_load(
+    public_key_der: *const u8,
+    public_key_der_size: size_t,
+) -> *const rustls_hpke_public_key {
+    ffi_panic_boundary! {
+        to_arc_const_ptr(try_slice!(public_key_der, public_key_der_size).to_vec())
+    }
+}
+
+/// Frees the `rustls_hpke_public_key`. This is safe to call with a `NULL` argument, but
+/// must not be called twice with the same value.
+#[no_mangle]
+pub extern "C" fn rustls_hpke_public_key_free(pk: *const rustls_hpke_public_key) {
+    ffi_panic_boundary! {
+        free_arc(pk)
     }
 }
 
