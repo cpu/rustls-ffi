@@ -434,6 +434,8 @@ main(int argc, const char **argv)
 
   const struct rustls_crypto_provider *custom_provider = NULL;
   struct rustls_client_config_builder *config_builder = NULL;
+  rustls_hpke *hpke_grease_suite = NULL;
+  const rustls_hpke_public_key *hpke_grease_public_key = NULL;
   struct rustls_root_cert_store_builder *server_cert_root_store_builder = NULL;
   const struct rustls_root_cert_store *server_cert_root_store = NULL;
   const struct rustls_client_config *client_config = NULL;
@@ -472,6 +474,43 @@ main(int argc, const char **argv)
   }
   else {
     config_builder = rustls_client_config_builder_new();
+  }
+
+  if(getenv("RUSTLS_ECH_GREASE")) {
+#if !DEFINE_AWS_LC_RS
+    fprintf(stderr, "client: ECH only available with aws-lc-rs enabled\n");
+    goto cleanup;
+#else
+    // We naively use the first suite for GREASE. A real application would
+    // be wise to choose the HPKE suite randomly from the supported set.
+    hpke_grease_suite = rustls_aws_lc_rs_hpke_get(0);
+    if(hpke_grease_suite == NULL) {
+      fprintf(stderr, "client: failed to get GREASE HPKE suite\n");
+      goto cleanup;
+    }
+
+    fprintf(
+      stderr,
+      "client: using ECH GREASE with HPKE suite kem=%d hkdf=%d aead=%d\n",
+      rustls_hpke_kem(hpke_grease_suite),
+      rustls_hpke_kdf(hpke_grease_suite),
+      rustls_hpke_aead(hpke_grease_suite));
+
+    result = rustls_hpke_grease_public_key(hpke_grease_suite,
+                                           &hpke_grease_public_key);
+    if(result != RUSTLS_RESULT_OK) {
+      fprintf(stderr,
+              "client: failed to generate GREASE ECH HPKE public key\n");
+      goto cleanup;
+    }
+
+    result = rustls_client_config_builder_enable_ech_grease(
+      config_builder, hpke_grease_suite, hpke_grease_public_key);
+    if(result != RUSTLS_RESULT_OK) {
+      fprintf(stderr, "client: failed to configure GREASE ECH\n");
+      goto cleanup;
+    }
+#endif
   }
 
   if(getenv("RUSTLS_PLATFORM_VERIFIER")) {
@@ -578,6 +617,8 @@ cleanup:
     server_cert_verifier_builder);
   rustls_server_cert_verifier_free(server_cert_verifier);
   rustls_certified_key_free(certified_key);
+  rustls_hpke_public_key_free(hpke_grease_public_key);
+  rustls_hpke_free(hpke_grease_suite);
   rustls_client_config_free(client_config);
   rustls_crypto_provider_free(custom_provider);
 
