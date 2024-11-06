@@ -6,7 +6,8 @@ use std::sync::Arc;
 use libc::{c_char, size_t};
 use pki_types::{CertificateDer, EchConfigListBytes, UnixTime};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
-use rustls::client::{EchConfig, EchMode, ResolvesClientCert};
+use rustls::client::{EchConfig, EchGreaseConfig, EchMode, ResolvesClientCert};
+use rustls::crypto::hpke::HpkePublicKey;
 use rustls::crypto::{verify_tls12_signature, verify_tls13_signature, CryptoProvider};
 use rustls::{
     sign::CertifiedKey, ClientConfig, ClientConnection, DigitallySignedStruct, Error, KeyLog,
@@ -15,7 +16,7 @@ use rustls::{
 
 use crate::cipher::{rustls_certified_key, rustls_server_cert_verifier};
 use crate::connection::{rustls_connection, Connection};
-use crate::crypto_provider::{rustls_crypto_provider, rustls_hpke};
+use crate::crypto_provider::{rustls_crypto_provider, rustls_hpke, rustls_hpke_public_key};
 use crate::error::rustls_result::{InvalidParameter, NullParameter};
 use crate::error::{self, map_error, rustls_result};
 use crate::keylog::{rustls_keylog_log_callback, rustls_keylog_will_log_callback, CallbackKeyLog};
@@ -364,6 +365,7 @@ impl rustls_client_config_builder {
         }
     }
 
+    // TODO(@cpu): docs. mention exclusive with enable_ech_grease()
     #[no_mangle]
     pub extern "C" fn rustls_client_config_builder_enable_ech(
         builder: *mut rustls_client_config_builder,
@@ -411,6 +413,33 @@ impl rustls_client_config_builder {
                 Ok(ech_config) => Some(ech_config.into()),
                 Err(err) => return map_error(err),
             };
+
+            rustls_result::Ok
+        }
+    }
+
+    // TODO(@cpu): docs. mention exclusive with enable_ech()
+    #[no_mangle]
+    pub extern "C" fn rustls_client_config_builder_enable_ech_grease(
+        builder: *mut rustls_client_config_builder,
+        suite: *const rustls_hpke,
+        placeholder_public_key: *const rustls_hpke_public_key,
+    ) -> rustls_result {
+        ffi_panic_boundary! {
+            let builder = try_mut_from_ptr!(builder);
+            let suite = try_ref_from_ptr!(suite);
+            let placeholder_pk = HpkePublicKey(try_ref_from_ptr!(placeholder_public_key).clone());
+
+            // If the builder's TLS versions have been customized, and the customization
+            // isn't "only TLS 1.3", return an error.
+            if !builder.versions.is_empty() && builder.versions != [&rustls::version::TLS13] {
+                return rustls_result::BuilderIncompatibleTlsVersions;
+            }
+
+            builder.ech_mode = Some(EchMode::Grease(EchGreaseConfig::new(
+                *suite,
+                placeholder_pk,
+            )));
 
             rustls_result::Ok
         }
