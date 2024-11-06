@@ -54,6 +54,20 @@ pub(crate) struct ClientConfigBuilder {
     key_log: Option<Arc<dyn KeyLog>>,
 }
 
+impl Default for ClientConfigBuilder {
+    fn default() -> Self {
+        Self {
+            provider: None,
+            versions: rustls::DEFAULT_VERSIONS.to_vec(),
+            verifier: None,
+            cert_resolver: None,
+            alpn_protocols: Vec::new(),
+            enable_sni: true,
+            key_log: None,
+        }
+    }
+}
+
 arc_castable! {
     /// A client config that is done being constructed and is now read-only.
     ///
@@ -81,12 +95,7 @@ impl rustls_client_config_builder {
         ffi_panic_boundary! {
             let builder = ClientConfigBuilder {
                 provider: crypto_provider::get_default_or_install_from_crate_features(),
-                versions: rustls::DEFAULT_VERSIONS.to_vec(),
-                verifier: None,
-                cert_resolver: None,
-                alpn_protocols: vec![],
-                enable_sni: true,
-                key_log: None,
+                ..ClientConfigBuilder::default()
             };
             to_boxed_mut_ptr(builder)
         }
@@ -136,11 +145,7 @@ impl rustls_client_config_builder {
             let config_builder = ClientConfigBuilder {
                 provider: Some(provider),
                 versions,
-                verifier: None,
-                cert_resolver: None,
-                alpn_protocols: vec![],
-                enable_sni: true,
-                key_log: None,
+                ..ClientConfigBuilder::default()
             };
 
             set_boxed_mut_ptr(builder_out, config_builder);
