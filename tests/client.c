@@ -512,6 +512,56 @@ main(int argc, const char **argv)
     }
 #endif
   }
+  else if(getenv("RUSTLS_ECH_CONFIG_LIST")) {
+#if !DEFINE_AWS_LC_RS
+    fprintf(stderr, "client: ECH only available with aws-lc-rs enabled\n");
+    goto cleanup;
+#else
+    char ech_config_list_buf[10000];
+    size_t ech_config_list_len;
+
+    unsigned int read_result = read_file(getenv("RUSTLS_ECH_CONFIG_LIST"),
+                                         ech_config_list_buf,
+                                         sizeof(ech_config_list_buf),
+                                         &ech_config_list_len);
+    if(read_result != DEMO_OK) {
+      fprintf(stderr,
+              "client: failed to read ECH config list file: '%s'\n",
+              getenv("RUSTLS_ECH_CONFIG_LIST"));
+      goto cleanup;
+    }
+
+    size_t hpke_suites_len = rustls_aws_lc_rs_hpke_len();
+    const struct rustls_hpke **hpke_suites =
+      malloc(hpke_suites_len * sizeof(const struct rustls_hpke *));
+    if(hpke_suites == NULL) {
+      fprintf(stderr, "client: failed to allocate ECH suite array");
+      goto cleanup;
+    }
+
+    // One could do some filtering for specific suites here. We just use
+    // all of them.
+    for(size_t i = 0; i < hpke_suites_len; i++) {
+      hpke_suites[i] = rustls_aws_lc_rs_hpke_get(i);
+    }
+
+    result = rustls_client_config_builder_enable_ech(
+      config_builder,
+      (uint8_t *)ech_config_list_buf,
+      ech_config_list_len,
+      // TODO(@cpu): need to sort out const-ness.
+      (struct rustls_hpke *const *)hpke_suites,
+      hpke_suites_len);
+    if(result != RUSTLS_RESULT_OK) {
+      fprintf(stderr, "client: failed to configure ECH");
+      goto cleanup;
+    }
+
+    fprintf(stderr,
+            "client: using ECH with config list from '%s'\n",
+            getenv("RUSTLS_ECH_CONFIG_LIST"));
+#endif
+  }
 
   if(getenv("RUSTLS_PLATFORM_VERIFIER")) {
     result = rustls_platform_server_cert_verifier(&server_cert_verifier);
