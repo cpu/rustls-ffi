@@ -62,6 +62,8 @@ enum rustls_result {
   RUSTLS_RESULT_NO_DEFAULT_CRYPTO_PROVIDER = 7016,
   RUSTLS_RESULT_GET_RANDOM_FAILED = 7017,
   RUSTLS_RESULT_NO_CERT_RESOLVER = 7018,
+  RUSTLS_RESULT_HPKE_ERROR = 7019,
+  RUSTLS_RESULT_BUILDER_INCOMPATIBLE_TLS_VERSIONS = 7020,
   RUSTLS_RESULT_NO_CERTIFICATES_PRESENTED = 7101,
   RUSTLS_RESULT_DECRYPT_ERROR = 7102,
   RUSTLS_RESULT_FAILED_TO_GET_CURRENT_TIME = 7103,
@@ -281,6 +283,8 @@ typedef struct rustls_crypto_provider rustls_crypto_provider;
  * A `rustls_crypto_provider` builder.
  */
 typedef struct rustls_crypto_provider_builder rustls_crypto_provider_builder;
+
+typedef struct rustls_hpke rustls_hpke;
 
 /**
  * An alias for `struct iovec` from uio.h (on Unix) or `WSABUF` on Windows.
@@ -1741,6 +1745,56 @@ rustls_result rustls_client_config_builder_set_key_log(struct rustls_client_conf
                                                        rustls_keylog_will_log_callback will_log_cb);
 
 /**
+ * Configure the client for Encrypted Client Hello (ECH).
+ *
+ * This requires providing a DER encoded list of ECH configurations that should
+ * have been retrieved from the DNS HTTPS record for the domain you intend to connect to.
+ * This should be done using DNS-over-HTTPS to avoid leaking the domain name you are
+ * connecting to ahead of the TLS handshake.
+ *
+ * At least one of the ECH configurations must be compatible with the provided `rustls_hpke`
+ * instance. See `rustls_supported_hpke()` for more information.
+ *
+ * Calling this function will replace any existing ECH configuration set by
+ * previous calls to `rustls_client_config_builder_enable_ech()` or
+ * `rustls_client_config_builder_enable_ech_grease()`.
+ *
+ * The provided `ech_config_list_der` and `rustls_hpke` must not be NULL or an
+ * error will be returned. The caller maintains ownership of the ECH config list DER but
+ * the `supported_hpke_suites` are consumed and the caller should not free or reference
+ * them further.
+ *
+ * A `RUSTLS_RESULT_BUILDER_INCOMPATIBLE_TLS_VERSIONS` error is returned if the builder's
+ * TLS versions have been customized via `rustls_client_config_builder_new_custom()`
+ * and the customization isn't "only TLS 1.3". ECH may only be used with TLS 1.3.
+ */
+rustls_result rustls_client_config_builder_enable_ech(struct rustls_client_config_builder *builder,
+                                                      const uint8_t *ech_config_list_der,
+                                                      size_t ech_config_list_der_size,
+                                                      const struct rustls_hpke *hpke);
+
+/**
+ * Configure the client for GREASE Encrypted Client Hello (ECH).
+ *
+ * This is a feature to prevent ossification of the TLS handshake by acting as though
+ * ECH were configured for an imaginary ECH config for the given suite and placeholder
+ * public key.
+ *
+ * The provided `rustls_client_config_builder` and `rustls_hpke` must not be NULL or an
+ * error will be returned.
+ *
+ * Calling this function will replace any existing ECH configuration set by
+ * previous calls to `rustls_client_config_builder_enable_ech()` or
+ * `rustls_client_config_builder_enable_ech_grease()`.
+ *
+ * A `RUSTLS_RESULT_BUILDER_INCOMPATIBLE_TLS_VERSIONS` error is returned if the builder's
+ * TLS versions have been customized via `rustls_client_config_builder_new_custom()`
+ * and the customization isn't "only TLS 1.3". ECH may only be used with TLS 1.3.
+ */
+rustls_result rustls_client_config_builder_enable_ech_grease(struct rustls_client_config_builder *builder,
+                                                             const struct rustls_hpke *hpke);
+
+/**
  * Turn a *rustls_client_config_builder (mutable) into a const *rustls_client_config
  * (read-only).
  */
@@ -2326,6 +2380,8 @@ rustls_result rustls_default_crypto_provider_random(uint8_t *buff, size_t len);
  * must not be called twice with the same value.
  */
 void rustls_signing_key_free(struct rustls_signing_key *signing_key);
+
+const struct rustls_hpke *rustls_supported_hpke(void);
 
 /**
  * Convert a `rustls_handshake_kind` to a string with a friendly description of the kind
