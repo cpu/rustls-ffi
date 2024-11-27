@@ -144,7 +144,67 @@ do_read(struct conndata *conn, struct rustls_connection *rconn)
   return DEMO_EOF;
 }
 
-static const char *CONTENT_LENGTH = "Content-Length";
+/* Helper function to parse a chunked response */
+size_t
+parse_chunked_data(const char *data, size_t len, char **out, size_t *out_len)
+{
+  size_t consumed = 0;
+  size_t total_output = 0;
+  char *output = NULL;
+
+  while(consumed < len) {
+    // Parse the chunk size line (terminated by \r\n)
+    const char *chunk_size_line = data + consumed;
+    char *endptr = NULL;
+    size_t chunk_size = strtoul(chunk_size_line, &endptr, 16);
+
+    if(endptr == chunk_size_line || (*endptr != '\r' && *endptr != '\n')) {
+      fprintf(stderr, "Invalid chunk size\n");
+      free(output);
+      return 0;
+    }
+
+    // Move past the chunk size line and the trailing \r\n
+    const char *chunk_data_start = endptr;
+    if(*chunk_data_start == '\r')
+      chunk_data_start++;
+    if(*chunk_data_start == '\n')
+      chunk_data_start++;
+
+    consumed = chunk_data_start - data;
+
+    if(chunk_size == 0) {
+      // End of chunks
+      consumed += 2; // Skip the trailing \r\n after the final chunk
+      break;
+    }
+
+    // Ensure there's enough data for the chunk
+    if(consumed + chunk_size + 2 > len) {
+      fprintf(stderr, "Incomplete chunk\n");
+      free(output);
+      return 0;
+    }
+
+    // Append the chunk data to the output
+    output = realloc(output, total_output + chunk_size);
+    if(output == NULL) {
+      fprintf(stderr, "Out of memory\n");
+      return 0;
+    }
+    memcpy(output + total_output, chunk_data_start, chunk_size);
+    total_output += chunk_size;
+
+    // Move past the chunk data and the trailing \r\n
+    consumed += chunk_size + 2;
+  }
+
+  *out = output;
+  *out_len = total_output;
+  return consumed;
+}
+
+// static const char *CONTENT_LENGTH = "Content-Length";
 
 /*
  * Given an established TCP connection, and a rustls_connection, send an
@@ -165,8 +225,6 @@ send_request_and_read_response(struct conndata *conn,
   fd_set write_fds;
   size_t n = 0;
   const char *body;
-  const char *content_length_str;
-  const char *content_length_end;
   unsigned long content_length = 0;
   size_t headers_len = 0;
   struct rustls_str version;
@@ -199,13 +257,6 @@ send_request_and_read_response(struct conndata *conn,
     LOG_SIMPLE("short write writing plaintext bytes to rustls_connection");
     goto cleanup;
   }
-
-  ciphersuite_id = rustls_connection_get_negotiated_ciphersuite(rconn);
-  ciphersuite_name = rustls_connection_get_negotiated_ciphersuite_name(rconn);
-  LOG("negotiated ciphersuite: %.*s (%#x)",
-      (int)ciphersuite_name.len,
-      ciphersuite_name.data,
-      ciphersuite_id);
 
   for(;;) {
     FD_ZERO(&read_fds);
@@ -251,22 +302,61 @@ send_request_and_read_response(struct conndata *conn,
           if(body != NULL) {
             headers_len = body - conn->data.data;
             LOG("body began at %zu", headers_len);
-            content_length_str = get_first_header_value(conn->data.data,
-                                                        headers_len,
-                                                        CONTENT_LENGTH,
-                                                        strlen(CONTENT_LENGTH),
-                                                        &n);
-            if(content_length_str == NULL) {
-              LOG_SIMPLE("content length header not found");
+            const char *content_length_str = NULL;
+            size_t content_length_len = 0;
+            const char *transfer_encoding_str = NULL;
+            size_t transfer_encoding_len = 0;
+
+            // Extract headers
+            if(extract_headers(conn->data.data,
+                               headers_len,
+                               &content_length_str,
+                               &content_length_len,
+                               &transfer_encoding_str,
+                               &transfer_encoding_len) != 0) {
+              LOG_SIMPLE("Failed to extract headers");
               goto cleanup;
             }
-            content_length =
-              strtoul(content_length_str, (char **)&content_length_end, 10);
-            if(content_length_end == content_length_str) {
-              LOG("invalid Content-Length '%.*s'", (int)n, content_length_str);
+
+            // Handle Content-Length
+            if(content_length_str) {
+              content_length = strtoul(content_length_str, NULL, 10);
+              LOG("Content-Length: %lu", content_length);
+            }
+
+            // Handle Transfer-Encoding: chunked
+            if(transfer_encoding_str &&
+               strncasecmp(transfer_encoding_str,
+                           " chunked",
+                           transfer_encoding_len) == 0) {
+              LOG_SIMPLE("Transfer-Encoding: chunked detected");
+
+              char *chunked_output = NULL;
+              size_t chunked_output_len = 0;
+
+              if(parse_chunked_data(body,
+                                    conn->data.len - headers_len,
+                                    &chunked_output,
+                                    &chunked_output_len)) {
+                LOG("Parsed chunked data: %zu bytes", chunked_output_len);
+                if(write(STDOUT_FILENO, chunked_output, chunked_output_len) <
+                   0) {
+                  LOG_SIMPLE("Error writing chunked data to stdout");
+                }
+                free(chunked_output);
+                goto drain_plaintext;
+              }
+              else {
+                LOG_SIMPLE("Error parsing chunked response");
+                goto cleanup;
+              }
+            }
+
+            // If neither Content-Length nor chunked encoding, log error.
+            if(!content_length_str && !transfer_encoding_str) {
+              LOG_SIMPLE("No Content-Length or Transfer-Encoding found");
               goto cleanup;
             }
-            LOG("content length %lu", content_length);
           }
         }
         if(headers_len != 0 &&
@@ -299,6 +389,13 @@ send_request_and_read_response(struct conndata *conn,
   LOG_SIMPLE("send_request_and_read_response: loop fell through");
 
 drain_plaintext:
+  ciphersuite_id = rustls_connection_get_negotiated_ciphersuite(rconn);
+  ciphersuite_name = rustls_connection_get_negotiated_ciphersuite_name(rconn);
+  LOG("negotiated ciphersuite: %.*s (%#x)",
+      (int)ciphersuite_name.len,
+      ciphersuite_name.data,
+      ciphersuite_id);
+
   hs_kind = rustls_connection_handshake_kind(rconn);
   hs_kind_name = rustls_handshake_kind_str(hs_kind);
   LOG("handshake kind: %.*s", (int)hs_kind_name.len, hs_kind_name.data);
@@ -487,7 +584,7 @@ main(int argc, const char **argv)
       fprintf(stderr, "client: failed to configure ECH GREASE\n");
       goto cleanup;
     }
-    fprintf(stderr, "configured for ECH GREASE\n");
+    LOG_SIMPLE("configured for ECH GREASE");
   }
   else if(getenv("RUSTLS_ECH_CONFIG_LIST")) {
     const rustls_hpke *hpke = rustls_supported_hpke();
@@ -519,8 +616,7 @@ main(int argc, const char **argv)
       goto cleanup;
     }
 
-    fprintf(stderr,
-            "client: using ECH with config list from '%s'\n",
+    LOG("client: using ECH with config list from '%s'",
             getenv("RUSTLS_ECH_CONFIG_LIST"));
   }
 
@@ -610,13 +706,13 @@ main(int argc, const char **argv)
     goto cleanup;
   }
 
-  int i;
-  for(i = 0; i < 3; i++) {
+ // int i;
+  //for(i = 0; i < 3; i++) {
     result = do_request(client_config, hostname, port, path);
     if(result != 0) {
       goto cleanup;
     }
-  }
+  //}
 
   // Success!
   ret = 0;

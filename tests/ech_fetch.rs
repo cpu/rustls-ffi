@@ -19,7 +19,9 @@ use rustls::pki_types::EchConfigListBytes;
 async fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args().skip(1);
     let domain = args.next().unwrap_or("research.cloudflare.com".to_string());
-    let output_path = args.next().unwrap_or(format!("testdata/{}.ech.configs.der", domain));
+    let output_path = args
+        .next()
+        .unwrap_or(format!("testdata/{}.ech.configs.der", domain));
 
     let resolver = Resolver::tokio(ResolverConfig::google_https(), ResolverOpts::default());
     let tls_encoded_list = lookup_ech(&resolver, &domain).await;

@@ -214,7 +214,7 @@ copy_plaintext_to_buffer(struct conndata *conn)
       return DEMO_ERROR;
     }
     if(n == 0) {
-      fprintf(stderr, "got 0-byte read, cleanly ending connection\n");
+      LOG_SIMPLE("got 0-byte read, cleanly ending connection");
       return DEMO_EOF;
     }
     bytevec_consume(&conn->data, n);
@@ -291,9 +291,8 @@ get_first_header_value(const char *headers, size_t headers_len,
   size_t len = headers_len;
   size_t skipped;
 
-  // We use + 3 because there needs to be room for `:` and `\r\n` after the
-  // header name
   while(len > name_len + 3) {
+    // Find the next header line.
     result = memmem(current, len, "\r\n", 2);
     if(result == NULL) {
       return NULL;
@@ -301,26 +300,74 @@ get_first_header_value(const char *headers, size_t headers_len,
     skipped = (char *)result - current + 2;
     len -= skipped;
     current += skipped;
-    /* Make sure there's enough room to conceivably contain the header name,
-     * a colon (:), and something after that.
-     */
-    if(len < name_len + 2) {
-      return NULL;
-    }
-    if(strncasecmp(name, current, name_len) == 0 && current[name_len] == ':') {
-      /* Found it! */
-      len -= name_len + 1;
+
+    // Check if the line contains the desired header.
+    if(len >= name_len + 2 && strncasecmp(name, current, name_len) == 0 &&
+       current[name_len] == ':') {
       current += name_len + 1;
+      len -= name_len + 1;
+
+      // Find the end of the header value.
       result = memmem(current, len, "\r\n", 2);
       if(result == NULL) {
         *n = len;
         return current;
       }
+
       *n = (char *)result - current;
       return current;
     }
   }
+
   return NULL;
+}
+
+int
+extract_headers(const char *headers, size_t headers_len,
+                const char **content_length, size_t *content_length_len,
+                const char **transfer_encoding, size_t *transfer_encoding_len)
+{
+  const char *current = headers;
+  const void *result;
+  size_t len = headers_len;
+
+  *content_length = NULL;
+  *transfer_encoding = NULL;
+
+  while(len > 0) {
+    // Find the end of the current header line.
+    result = memmem(current, len, "\r\n", 2);
+    if(result == NULL) {
+      break;
+    }
+
+    size_t line_len = (char *)result - current;
+    len -= line_len + 2; // Advance past this line and the trailing \r\n
+    const char *line = current;
+    current += line_len + 2;
+
+    // Check for Content-Length.
+    if(line_len > strlen("Content-Length:") &&
+       strncasecmp(line, "Content-Length:", strlen("Content-Length:")) == 0) {
+      *content_length = line + strlen("Content-Length:");
+      *content_length_len = strcspn(*content_length, "\r\n");
+    }
+
+    // Check for Transfer-Encoding.
+    if(line_len > strlen("Transfer-Encoding:") &&
+       strncasecmp(line, "Transfer-Encoding:", strlen("Transfer-Encoding:")) ==
+         0) {
+      *transfer_encoding = line + strlen("Transfer-Encoding:");
+      *transfer_encoding_len = strcspn(*transfer_encoding, "\r\n");
+    }
+
+    // Stop if we have all desired headers.
+    if(*content_length || *transfer_encoding) {
+      break;
+    }
+  }
+
+  return 0;
 }
 
 void

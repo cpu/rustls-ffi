@@ -115,15 +115,10 @@ void *memmem(const void *haystack, size_t haystacklen, const void *needle,
  */
 char *body_beginning(struct bytevec *vec);
 
-/* If any header matching the provided name (NUL-terminated) exists, return
- * a pointer to the beginning of the value for the first such occurrence
- * and store the length of the header in n.
- * If no such header exists, return NULL and don't modify n.
- * The returned pointer will be borrowed from `headers`.
- */
-const char *get_first_header_value(const char *headers, size_t headers_len,
-                                   const char *name, size_t name_len,
-                                   size_t *n);
+int extract_headers(const char *headers, size_t headers_len,
+                    const char **content_length, size_t *content_length_len,
+                    const char **transfer_encoding,
+                    size_t *transfer_encoding_len);
 
 void log_cb(void *userdata, const struct rustls_log_params *params);
 
