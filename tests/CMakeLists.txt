@@ -17,7 +17,7 @@ endif ()
 set(sanitizer_flags "$<$<CONFIG:Debug>:-fsanitize=address>")
 add_compile_options(${sanitizer_flags})
 
-add_executable(client client.c common.c)
+add_executable(client common.c client.c)
 add_dependencies(client rustls-ffi)
 target_include_directories(client PUBLIC ${CMAKE_SOURCE_DIR}/src)
 IF (WIN32)
@@ -36,7 +36,7 @@ IF (APPLE)
     # TODO
 ENDIF (APPLE)
 
-add_executable(server server.c common.c)
+add_executable(server common.c server.c)
 add_dependencies(server rustls-ffi)
 target_include_directories(server PUBLIC ${CMAKE_SOURCE_DIR}/src)
 IF (WIN32)
