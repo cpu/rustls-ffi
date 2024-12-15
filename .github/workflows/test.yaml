@@ -298,6 +298,9 @@ jobs:
       - name: cargo test (debug; ring; -Z minimal-versions)
         run: cargo -Z minimal-versions test --no-default-features --features=ring --locked
 
+      - name: carg test (debug; no provider; -Z minimal-versions)
+        run: cargo -Z minimal-versions test --no-default-features --locked
+
   format:
     name: Format
     runs-on: ubuntu-latest
