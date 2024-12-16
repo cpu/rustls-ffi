@@ -42,6 +42,9 @@ typedef enum rustls_handshake_kind {
   RUSTLS_HANDSHAKE_KIND_RESUMED = 3,
 } rustls_handshake_kind;
 
+/**
+ * Numeric error codes returned from rustls-ffi API functions.
+ */
 enum rustls_result {
   RUSTLS_RESULT_OK = 7000,
   RUSTLS_RESULT_IO = 7001,
@@ -553,6 +556,9 @@ typedef struct rustls_verify_server_cert_params {
   struct rustls_slice_bytes ocsp_response;
 } rustls_verify_server_cert_params;
 
+/**
+ * Test.
+ */
 typedef uint32_t (*rustls_verify_server_cert_callback)(rustls_verify_server_cert_user_data userdata,
                                                        const struct rustls_verify_server_cert_params *params);
 

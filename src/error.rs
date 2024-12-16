@@ -45,6 +45,7 @@ macro_rules! u32_enum_builder {
 }
 
 u32_enum_builder! {
+    /// Numeric error codes returned from rustls-ffi API functions.
     EnumName: rustls_result;
     EnumDefault: InvalidParameter;
     EnumVal{
