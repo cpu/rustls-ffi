@@ -272,6 +272,9 @@ typedef struct rustls_client_config rustls_client_config;
  */
 typedef struct rustls_client_config_builder rustls_client_config_builder;
 
+/**
+ * A C representation of a Rustls `Connection`.
+ */
 typedef struct rustls_connection rustls_connection;
 
 /**
@@ -575,13 +578,31 @@ typedef void (*rustls_keylog_log_callback)(struct rustls_str label,
  */
 typedef int (*rustls_keylog_will_log_callback)(struct rustls_str label);
 
+/**
+ * Numeric representation of a log level.
+ *
+ * Passed as a field of the `rustls_log_params` passed to a log callback.
+ * Use with `rustls_log_level_str` to convert to a string label.
+ */
 typedef size_t rustls_log_level;
 
+/**
+ * Parameter structure passed to a `rustls_log_callback`.
+ */
 typedef struct rustls_log_params {
+  /**
+   * The log level the message was logged at.
+   */
   rustls_log_level level;
+  /**
+   * The message that was logged.
+   */
   struct rustls_str message;
 } rustls_log_params;
 
+/**
+ * A callback that is invoked for messages logged by rustls.
+ */
 typedef void (*rustls_log_callback)(void *userdata, const struct rustls_log_params *params);
 
 /**
@@ -1957,6 +1978,9 @@ bool rustls_connection_wants_write(const struct rustls_connection *conn);
  */
 bool rustls_connection_is_handshaking(const struct rustls_connection *conn);
 
+/**
+ * Returns a `rustls_handshake_kind` describing the `rustls_connection`.
+ */
 enum rustls_handshake_kind rustls_connection_handshake_kind(const struct rustls_connection *conn);
 
 /**
@@ -2419,6 +2443,9 @@ struct rustls_str rustls_handshake_kind_str(enum rustls_handshake_kind kind);
  */
 void rustls_error(unsigned int result, char *buf, size_t len, size_t *out_n);
 
+/**
+ * Returns true if the `result` is a certificate related error.
+ */
 bool rustls_result_is_cert_error(unsigned int result);
 
 /**
