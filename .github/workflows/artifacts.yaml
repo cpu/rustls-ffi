@@ -53,14 +53,7 @@ jobs:
         run: |
           curl -L $LINK/$CARGO_C_FILE | tar xz -C ~/.cargo/bin
 
-      - name: Install cross
-        run: cargo install cross
-
-      - name: Build rustls-ffi
-        run: |
-          cross build --target x86_64-unknown-linux-gnu --features cert_compression --release
-
-      - name: Build rusts-ffi dist
+      - name: Build rusts-ffi
         run: |
           cargo cinstall --target x86_64-unknown-linux-gnu --features cert_compression --release --prefix dist
 
@@ -91,6 +84,10 @@ jobs:
       - name: Build rusts-ffi
         run: |
           cargo cinstall --features cert_compression --release --prefix dist
+
+      - name: Fix rpath
+        run: |
+          install_name_tool -id @rpath/librustls.dylib dist/lib/librustls.dylib
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
