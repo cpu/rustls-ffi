@@ -253,7 +253,8 @@ jobs:
       - name: Run ECH connect test
         if: matrix.crypto == 'aws-lc-rs' # No HPKE in ring
         run: |
-          cmake --build build --target ech-test > ech-test.log
+          cmake --build build --target ech-test | Tee-Object -FilePath ech-test.log
+          Get-Content ech-test.log
           grep 'sni=encrypted' ech-test.log
 
   ensure-header-updated:
