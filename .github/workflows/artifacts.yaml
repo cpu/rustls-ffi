@@ -28,7 +28,7 @@ jobs:
 
       - name: Build rusts-ffi
         run: |
-          cargo cinstall --features cert_compression --release --prefix dist --target x86_64-pc-windows-msvc
+          cargo cinstall --locked --target x86_64-pc-windows-msvc --features cert_compression --release --prefix dist
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
@@ -68,6 +68,32 @@ jobs:
           name: rustls-ffi-x86_64-linux-gnu
           path: dist
 
+  linux-deb:
+    runs-on: ubuntu-20.04 # x86_64. Using older Ubuntu for greater GLIBC compat.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-c (Ubuntu)
+        env:
+          LINK: https://github.com/lu-zero/cargo-c/releases/latest/download
+          CARGO_C_FILE: cargo-c-x86_64-unknown-linux-musl.tar.gz
+        run: |
+          curl -L $LINK/$CARGO_C_FILE | tar xz -C ~/.cargo/bin
+
+      - name: Build deb
+        run: ./debian/build.sh
+
+      - name: Upload deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: librustls_0.15.0_amd64.deb
+          path: librustls_0.15.0_amd64.deb
+
   macos-binaries-arm64:
     runs-on: macos-14 # arm64.
     steps:
@@ -88,7 +114,7 @@ jobs:
 
       - name: Build rusts-ffi
         run: |
-          cargo cinstall --features cert_compression --release --prefix dist
+          cargo cinstall --locked --features cert_compression --release --prefix dist
 
       - name: Fix rpath
         run: |
@@ -116,7 +142,7 @@ jobs:
 
       - name: Build rusts-ffi
         run: |
-          cargo cinstall --features cert_compression --release --prefix dist
+          cargo cinstall --locked --features cert_compression --release --prefix dist
 
       - name: Fix rpath
         run: |
