@@ -97,8 +97,8 @@ jobs:
           name: librustls_0.15.0_amd64.deb
           path: librustls_0.15.0_amd64.deb
 
-  macos-binaries-arm64:
-    name: MacOS (Arm64)
+  macos-binaries:
+    name: MacOS (Arm64 and x86_64)
     runs-on: macos-14 # arm64.
     steps:
       - uses: actions/checkout@v4
@@ -107,6 +107,9 @@ jobs:
 
       - name: Install stable Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          # Install both the arm64 and x86_64 targets.
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
 
       - name: Install cargo-c
         env:
@@ -116,53 +119,38 @@ jobs:
           curl -L $LINK/$CARGO_C_FILE -o cargo-c-macos.zip
           unzip cargo-c-macos.zip -d ~/.cargo/bin
 
-      - name: Build rusts-ffi
+      - name: Build rusts-ffi (arm64)
         run: |
-          cargo cinstall --locked --features cert_compression --release --prefix dist
+          cargo cinstall --target aarch64-apple-darwin --locked --features cert_compression --release --prefix arm64-dist
 
-      - name: Fix rpath
+      - name: Fix rpath (arm64)
         run: |
-          install_name_tool -id @rpath/librustls.dylib dist/lib/librustls.dylib
+          install_name_tool -id @rpath/librustls.dylib arm64-dist/lib/librustls.dylib
 
-      - name: Upload binaries
+      - name: Upload binaries (arm64)
         uses: actions/upload-artifact@v4
         with:
           name: rustls-ffi-arm64-macos
-          path: dist
+          path: arm64-dist
 
-  macos-binaries-x86_64:
-    name: MacOS (x86_64)
-    runs-on: macos-13 # x86_64.
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-
-      - name: Install stable Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-c
-        # This is slow, but upstream doesn't publish cargo-c binaries for x86_64 macos
-        run: cargo install cargo-c
-
-      - name: Build rusts-ffi
+      - name: Build rusts-ffi (x86_64)
         run: |
-          cargo cinstall --locked --features cert_compression --release --prefix dist
+          cargo cinstall --target x86_64-apple-darwin --locked --features cert_compression --release --prefix x86-dist
 
-      - name: Fix rpath
+      - name: Fix rpath (x86_64)
         run: |
-          install_name_tool -id @rpath/librustls.dylib dist/lib/librustls.dylib
+          install_name_tool -id @rpath/librustls.dylib x86-dist/lib/librustls.dylib
 
-      - name: Upload binaries
+      - name: Upload binaries (x86_64)
         uses: actions/upload-artifact@v4
         with:
           name: rustls-ffi-x86_64-macos
-          path: dist
+          path: x86-dist
 
   test-archives:
     name: "Test (${{ matrix.os }})"
     runs-on: ${{ matrix.os }}
-    needs: [ windows-binaries, linux-binaries, macos-binaries-arm64, macos-binaries-x86_64 ]
+    needs: [ windows-binaries, linux-binaries, macos-binaries ]
     strategy:
       matrix:
         include:
