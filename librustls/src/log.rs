@@ -49,7 +49,7 @@ pub(crate) fn ensure_log_registered() {
 pub type rustls_log_level = usize;
 
 /// Return a rustls_str containing the stringified version of a log level.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn rustls_log_level_str(level: rustls_log_level) -> rustls_str<'static> {
     let s = match level {
         1 => Level::Error.as_str(),

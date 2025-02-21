@@ -25,7 +25,7 @@ macro_rules! u32_enum_builder {
     $(#[$comment:meta])*
         EnumName: $enum_name: ident;
         EnumDefault: $enum_default: ident;
-        EnumVal { $( $enum_var: ident => $enum_val: expr ),* }
+        EnumVal { $( $enum_var: ident => $enum_val: expr_2021 ),* }
     ) => {
         $(#[$comment])*
         #[allow(dead_code)]
@@ -220,7 +220,7 @@ impl rustls_result {
     ///
     /// The contents of the error buffer will be out_n bytes long,
     /// UTF-8 encoded, and not NUL-terminated.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_error(
         result: c_uint,
         buf: *mut c_char,
@@ -244,7 +244,7 @@ impl rustls_result {
     }
 
     /// Returns true if the `result` is a certificate related error.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_result_is_cert_error(result: c_uint) -> bool {
         use rustls_result::*;
         matches!(

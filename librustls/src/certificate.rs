@@ -28,7 +28,7 @@ ref_castable! {
 
 /// Get the DER data of the certificate itself.
 /// The data is owned by the certificate and has the same lifetime.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn rustls_certificate_get_der(
     cert: *const rustls_certificate,
     out_der_data: *mut *const u8,
@@ -88,7 +88,7 @@ impl rustls_certified_key {
     /// `rustls_server_config` in possession of the sole reference, so the
     /// `rustls_certified_key`'s memory will automatically be released when
     /// the `rustls_server_config` is freed.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_certified_key_build(
         cert_chain: *const u8,
         cert_chain_len: size_t,
@@ -154,7 +154,7 @@ impl rustls_certified_key {
     /// `rustls_server_config` in possession of the sole reference, so the
     /// `rustls_certified_key`'s memory will automatically be released when
     /// the `rustls_server_config` is freed.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_certified_key_build_with_signing_key(
         cert_chain: *const u8,
         cert_chain_len: size_t,
@@ -187,7 +187,7 @@ impl rustls_certified_key {
     /// Indexes higher than the last available certificate return NULL.
     ///
     /// The returned certificate is valid until the rustls_certified_key is freed.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_certified_key_get_certificate<'a>(
         certified_key: *const rustls_certified_key,
         i: size_t,
@@ -209,7 +209,7 @@ impl rustls_certified_key {
     ///
     /// The cloned key is independent from its original and needs to be freed
     /// by the application.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_certified_key_clone_with_ocsp(
         certified_key: *const rustls_certified_key,
         ocsp_response: *const rustls_slice_bytes,
@@ -242,7 +242,7 @@ impl rustls_certified_key {
     ///
     /// If the private key matches the certificate this function returns `RUSTLS_RESULT_OK`,
     /// otherwise an error `rustls_result` is returned.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_certified_key_keys_match(
         key: *const rustls_certified_key,
     ) -> rustls_result {
@@ -262,7 +262,7 @@ impl rustls_certified_key {
     /// However, C code must consider this pointer unusable after "free"ing it.
     ///
     /// Calling with NULL is fine. Must not be called twice with the same value.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_certified_key_free(key: *const rustls_certified_key) {
         ffi_panic_boundary! {
             free_arc(key);
@@ -292,7 +292,7 @@ impl rustls_root_cert_store_builder {
     ///
     /// If you wish to abandon the builder without calling `rustls_root_cert_store_builder_build`,
     /// it must be freed with `rustls_root_cert_store_builder_free`.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_root_cert_store_builder_new() -> *mut rustls_root_cert_store_builder {
         ffi_panic_boundary! {
             let store = RootCertStore::empty();
@@ -309,7 +309,7 @@ impl rustls_root_cert_store_builder {
     /// When `strict` is false, unparseable root certificates will be ignored.
     /// This may be useful on systems that have syntactically invalid root
     /// certificates.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_root_cert_store_builder_add_pem(
         builder: *mut rustls_root_cert_store_builder,
         pem: *const u8,
@@ -354,7 +354,7 @@ impl rustls_root_cert_store_builder {
     /// When `strict` is false, unparseable root certificates will be ignored.
     /// This may be useful on systems that have syntactically invalid root
     /// certificates.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_root_cert_store_builder_load_roots_from_file(
         builder: *mut rustls_root_cert_store_builder,
         filename: *const c_char,
@@ -411,7 +411,7 @@ impl rustls_root_cert_store_builder {
     /// The root cert store can be used in several `rustls_web_pki_client_cert_verifier_builder_new`
     /// instances and must be freed by the application when no longer needed. See the documentation of
     /// `rustls_root_cert_store_free` for details about lifetime.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_root_cert_store_builder_build(
         builder: *mut rustls_root_cert_store_builder,
         root_cert_store_out: *mut *const rustls_root_cert_store,
@@ -430,7 +430,7 @@ impl rustls_root_cert_store_builder {
     /// `rustls_root_cert_store_builder_new`.
     ///
     /// Calling with NULL is fine. Must not be called twice with the same value.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_root_cert_store_builder_free(
         builder: *mut rustls_root_cert_store_builder,
     ) {
@@ -450,7 +450,7 @@ impl rustls_root_cert_store {
     /// Free a rustls_root_cert_store previously returned from rustls_root_cert_store_builder_build.
     ///
     /// Calling with NULL is fine. Must not be called twice with the same value.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_root_cert_store_free(store: *const rustls_root_cert_store) {
         ffi_panic_boundary! {
             free_arc(store);

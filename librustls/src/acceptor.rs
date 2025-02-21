@@ -56,7 +56,7 @@ impl rustls_acceptor {
     ///
     /// Caller owns the pointed-to memory and must eventually free it with
     /// `rustls_acceptor_free()`.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_acceptor_new() -> *mut rustls_acceptor {
         ffi_panic_boundary! {
             to_boxed_mut_ptr(Acceptor::default())
@@ -70,7 +70,7 @@ impl rustls_acceptor {
     /// acceptor: The rustls_acceptor to free.
     ///
     /// Calling with NULL is fine. Must not be called twice with the same value.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_acceptor_free(acceptor: *mut rustls_acceptor) {
         ffi_panic_boundary! {
             to_box(acceptor);
@@ -104,7 +104,7 @@ impl rustls_acceptor {
     /// This function passes through return values from `callback`. Typically
     /// `callback` should return an errno value. See `rustls_read_callback()` for
     /// more details.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_acceptor_read_tls(
         acceptor: *mut rustls_acceptor,
         callback: rustls_read_callback,
@@ -171,7 +171,7 @@ impl rustls_acceptor {
     /// Calling `rustls_acceptor_accept()` multiple times on the same
     /// `rustls_acceptor` is acceptable from a memory perspective but pointless
     /// from a protocol perspective.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_acceptor_accept(
         acceptor: *mut rustls_acceptor,
         out_accepted: *mut *mut rustls_accepted,
@@ -217,7 +217,7 @@ impl rustls_accepted {
     ///  - The `accepted` parameter was NULL.
     ///  - The `accepted` parameter was already transformed into a connection
     ///    with rustls_accepted_into_connection.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_accepted_server_name(
         accepted: *const rustls_accepted,
     ) -> rustls_str<'static> {
@@ -258,7 +258,7 @@ impl rustls_accepted {
     ///   - i is greater than the number of available cipher suites.
     ///   - accepted is NULL.
     ///   - rustls_accepted_into_connection has already been called with `accepted`.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_accepted_signature_scheme(
         accepted: *const rustls_accepted,
         i: usize,
@@ -296,7 +296,7 @@ impl rustls_accepted {
     ///
     /// Note that 0 is technically a valid cipher suite "TLS_NULL_WITH_NULL_NULL",
     /// but this library will never support null ciphers.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_accepted_cipher_suite(
         accepted: *const rustls_accepted,
         i: usize,
@@ -339,7 +339,7 @@ impl rustls_accepted {
     ///
     /// If you are calling this from Rust, note that the `'static` lifetime
     /// in the return signature is fake and must not be relied upon.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_accepted_alpn(
         accepted: *const rustls_accepted,
         i: usize,
@@ -404,7 +404,7 @@ impl rustls_accepted {
     /// `config`'s internal reference count, indicating that the
     /// rustls_connection may hold a reference to it until it is done.
     /// See the documentation for rustls_connection for details.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_accepted_into_connection(
         accepted: *mut rustls_accepted,
         config: *const rustls_server_config,
@@ -438,7 +438,7 @@ impl rustls_accepted {
     /// accepted: The rustls_accepted to free.
     ///
     /// Calling with NULL is fine. Must not be called twice with the same value.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_accepted_free(accepted: *mut rustls_accepted) {
         ffi_panic_boundary! {
             free_box(accepted);
@@ -466,7 +466,7 @@ impl rustls_accepted_alert {
     /// Returns 0 for success, or an errno value on error. Passes through return values
     /// from callback. See [`rustls_write_callback`] or [`AcceptedAlert`] for
     /// more details.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_accepted_alert_write_tls(
         accepted_alert: *mut rustls_accepted_alert,
         callback: rustls_write_callback,
@@ -500,7 +500,7 @@ impl rustls_accepted_alert {
     /// accepted_alert: The rustls_accepted_alert to free.
     ///
     /// Calling with NULL is fine. Must not be called twice with the same value.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_accepted_alert_free(accepted_alert: *mut rustls_accepted_alert) {
         ffi_panic_boundary! {
             free_box(accepted_alert);
@@ -538,7 +538,7 @@ mod tests {
         buf: *mut u8,
         n: usize,
         out_n: *mut usize,
-    ) -> rustls_io_result {
+    ) -> rustls_io_result { unsafe {
         let vecdeq: *mut VecDeque<u8> = userdata as *mut _;
         (*vecdeq).make_contiguous();
         let first = (*vecdeq).as_slices().0;
@@ -547,7 +547,7 @@ mod tests {
         (*vecdeq).drain(0..n).count();
         *out_n = n;
         rustls_io_result(0)
-    }
+    }}
 
     // Write bytes from the provided buffer into userdata (a `*mut VecDeque<u8>`).
     unsafe extern "C" fn vecdeque_write(
@@ -555,13 +555,13 @@ mod tests {
         buf: *const u8,
         n: size_t,
         out_n: *mut size_t,
-    ) -> rustls_io_result {
+    ) -> rustls_io_result { unsafe {
         let vecdeq: *mut VecDeque<u8> = userdata as *mut _;
         let buf = slice::from_raw_parts(buf, n);
         (*vecdeq).extend(buf);
         *out_n = n;
         rustls_io_result(0)
-    }
+    }}
 
     // Send junk data to a rustls_acceptor, expect MessageInvalidContentType from accept().
     #[test]
@@ -596,7 +596,7 @@ mod tests {
             buf: *const u8,
             n: size_t,
             _out_n: *mut size_t,
-        ) -> rustls_io_result {
+        ) -> rustls_io_result { unsafe {
             let mut expected = vec![ContentType::Alert.into()];
             ProtocolVersion::TLSv1_2.encode(&mut expected);
             (2_u16).encode(&mut expected);
@@ -606,7 +606,7 @@ mod tests {
             let alert_bytes = slice::from_raw_parts(buf, n);
             assert_eq!(alert_bytes, &expected);
             rustls_io_result(0)
-        }
+        }}
 
         // We expect that an accepted alert was generated, and that its bytes match a fatal level
         // TLS alert indicating a decode error.

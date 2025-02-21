@@ -98,7 +98,7 @@ impl rustls_client_config_builder {
     ///
     /// This starts out with no trusted roots. Caller must add roots with
     /// rustls_client_config_builder_load_roots_from_file or provide a custom verifier.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_builder_new() -> *mut rustls_client_config_builder {
         ffi_panic_boundary! {
             let builder = ClientConfigBuilder {
@@ -129,7 +129,7 @@ impl rustls_client_config_builder {
     ///
     /// Ciphersuites are configured separately via the crypto provider. See
     /// `rustls_crypto_provider_builder_set_cipher_suites` for more information.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_builder_new_custom(
         provider: *const rustls_crypto_provider,
         tls_versions: *const u16,
@@ -188,7 +188,7 @@ impl rustls_client_config_builder {
     /// section.
     ///
     /// <https://docs.rs/rustls/latest/rustls/client/struct.DangerousClientConfig.html#method.set_certificate_verifier>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_builder_dangerous_set_certificate_verifier(
         config_builder: *mut rustls_client_config_builder,
         callback: rustls_verify_server_cert_callback,
@@ -213,7 +213,7 @@ impl rustls_client_config_builder {
     /// Configure the server certificate verifier.
     ///
     /// This increases the reference count of `verifier` and does not take ownership.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_builder_set_server_verifier(
         builder: *mut rustls_client_config_builder,
         verifier: *const rustls_server_cert_verifier,
@@ -239,7 +239,7 @@ impl rustls_client_config_builder {
     /// any pointers, so the caller can free the pointed-to memory after calling.
     ///
     /// <https://docs.rs/rustls/latest/rustls/client/struct.ClientConfig.html#structfield.alpn_protocols>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_builder_set_alpn_protocols(
         builder: *mut rustls_client_config_builder,
         protocols: *const rustls_slice_bytes,
@@ -261,7 +261,7 @@ impl rustls_client_config_builder {
 
     /// Enable or disable SNI.
     /// <https://docs.rs/rustls/latest/rustls/struct.ClientConfig.html#structfield.enable_sni>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_builder_set_enable_sni(
         config: *mut rustls_client_config_builder,
         enable: bool,
@@ -286,7 +286,7 @@ impl rustls_client_config_builder {
     ///
     /// EXPERIMENTAL: installing a client authentication callback will replace any
     /// configured certified keys and vice versa.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_builder_set_certified_key(
         builder: *mut rustls_client_config_builder,
         certified_keys: *const *const rustls_certified_key,
@@ -316,7 +316,7 @@ impl rustls_client_config_builder {
     ///
     /// For more control over which secrets are logged, or to customize the format, prefer
     /// `rustls_client_config_builder_set_key_log`.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_builder_set_key_log_file(
         builder: *mut rustls_client_config_builder,
     ) -> rustls_result {
@@ -348,7 +348,7 @@ impl rustls_client_config_builder {
     ///
     /// See also `rustls_client_config_builder_set_key_log_file` for a simpler way to log
     /// to a file specified by the `SSLKEYLOGFILE` environment variable.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_builder_set_key_log(
         builder: *mut rustls_client_config_builder,
         log_cb: rustls_keylog_log_callback,
@@ -392,7 +392,7 @@ impl rustls_client_config_builder {
     /// A `RUSTLS_RESULT_BUILDER_INCOMPATIBLE_TLS_VERSIONS` error is returned if the builder's
     /// TLS versions have been customized via `rustls_client_config_builder_new_custom()`
     /// and the customization isn't "only TLS 1.3". ECH may only be used with TLS 1.3.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_builder_enable_ech(
         builder: *mut rustls_client_config_builder,
         ech_config_list_bytes: *const u8,
@@ -445,7 +445,7 @@ impl rustls_client_config_builder {
     /// A `RUSTLS_RESULT_BUILDER_INCOMPATIBLE_TLS_VERSIONS` error is returned if the builder's
     /// TLS versions have been customized via `rustls_client_config_builder_new_custom()`
     /// and the customization isn't "only TLS 1.3". ECH may only be used with TLS 1.3.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_builder_enable_ech_grease(
         builder: *mut rustls_client_config_builder,
         hpke: *const rustls_hpke,
@@ -476,7 +476,7 @@ impl rustls_client_config_builder {
 
     /// Turn a *rustls_client_config_builder (mutable) into a const *rustls_client_config
     /// (read-only).
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_builder_build(
         builder: *mut rustls_client_config_builder,
         config_out: *mut *const rustls_client_config,
@@ -504,12 +504,12 @@ impl rustls_client_config_builder {
             // ensure the protocols are compatible with the ECH mode. C makes it harder to
             // express that, so we enforce this at the time of populating `builder.ech_mode`.
             let wants_verifier;
-            if let Some(ech_mode) = builder.ech_mode {
+            match builder.ech_mode { Some(ech_mode) => {
                 wants_verifier = match config.with_ech(ech_mode) {
                     Ok(config) => config,
                     Err(err) => return map_error(err),
                 }
-            } else {
+            } _ => {
                 let versions = match builder.versions.is_empty() {
                     true => rustls::DEFAULT_VERSIONS,
                     false => builder.versions.as_slice(),
@@ -518,7 +518,7 @@ impl rustls_client_config_builder {
                     Ok(config) => config,
                     Err(err) => return map_error(err),
                 };
-            }
+            }}
 
             let config = wants_verifier
                 .dangerous()
@@ -546,7 +546,7 @@ impl rustls_client_config_builder {
     ///
     /// Use free only when the building of a config has to be aborted before a config
     /// was created.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_builder_free(config: *mut rustls_client_config_builder) {
         ffi_panic_boundary! {
             free_box(config);
@@ -720,7 +720,7 @@ impl rustls_client_config {
     /// This is different from `rustls_crypto_provider_fips` which is concerned
     /// only with cryptography, whereas this also covers TLS-level configuration that NIST
     /// recommends, as well as ECH HPKE suites if applicable.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_fips(config: *const rustls_client_config) -> bool {
         ffi_panic_boundary! {
             try_ref_from_ptr!(config).fips()
@@ -736,7 +736,7 @@ impl rustls_client_config {
     /// However, C code must consider this pointer unusable after "free"ing it.
     ///
     /// Calling with NULL is fine. Must not be called twice with the same value.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_config_free(config: *const rustls_client_config) {
         ffi_panic_boundary! {
             free_arc(config);
@@ -756,7 +756,7 @@ impl rustls_client_config {
     /// The server_name parameter can contain a hostname or an IP address in
     /// textual form (IPv4 or IPv6). This function will return an error if it
     /// cannot be parsed as one of those types.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_client_connection_new(
         config: *const rustls_client_config,
         server_name: *const c_char,

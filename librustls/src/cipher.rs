@@ -15,7 +15,7 @@ impl rustls_supported_ciphersuite {
     /// <https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-4>.
     ///
     /// The bytes from the assignment are interpreted in network order.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_supported_ciphersuite_get_suite(
         supported_ciphersuite: *const rustls_supported_ciphersuite,
     ) -> u16 {
@@ -35,7 +35,7 @@ impl rustls_supported_ciphersuite {
 /// If the provided ciphersuite is invalid, the `rustls_str` will contain the
 /// empty string. The lifetime of the `rustls_str` is the lifetime of the program,
 /// it does not need to be freed.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn rustls_supported_ciphersuite_get_name(
     supported_ciphersuite: *const rustls_supported_ciphersuite,
 ) -> rustls_str<'static> {
@@ -50,7 +50,7 @@ pub extern "C" fn rustls_supported_ciphersuite_get_name(
 /// Returns the `rustls_tls_version` of the ciphersuite.
 ///
 /// See also `RUSTLS_ALL_VERSIONS`.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn rustls_supported_ciphersuite_protocol_version(
     supported_ciphersuite: *const rustls_supported_ciphersuite,
 ) -> rustls_tls_version {

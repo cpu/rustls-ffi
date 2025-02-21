@@ -72,7 +72,7 @@ pub struct rustls_slice_slice_bytes<'a> {
 
 /// Return the length of the outer slice. If the input pointer is NULL,
 /// returns 0.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn rustls_slice_slice_bytes_len(input: *const rustls_slice_slice_bytes) -> size_t {
     match unsafe { input.as_ref() } {
         Some(c) => c.inner.len(),
@@ -84,7 +84,7 @@ pub extern "C" fn rustls_slice_slice_bytes_len(input: *const rustls_slice_slice_
 ///
 /// If the input pointer is NULL, or n is greater than the length
 /// of the `rustls_slice_slice_bytes`, returns rustls_slice_bytes{NULL, 0}.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn rustls_slice_slice_bytes_get(
     input: *const rustls_slice_slice_bytes,
     n: size_t,
@@ -208,18 +208,18 @@ impl rustls_str<'_> {
     /// at present, but the Stacked Borrows experiment provides one definition,
     /// by which a shared reference is valid until a mutable reference (to
     /// the object or a parent object) is created.
-    pub unsafe fn into_static(self) -> rustls_str<'static> {
+    pub unsafe fn into_static(self) -> rustls_str<'static> { unsafe {
         std::mem::transmute(self)
-    }
+    }}
 
     /// Change a rustls_str back to a &str.
     ///
     /// # Safety
     ///
     /// The caller must ensure the rustls_str data is valid utf8
-    pub unsafe fn to_str(&self) -> &str {
+    pub unsafe fn to_str(&self) -> &str { unsafe {
         str::from_utf8_unchecked(slice::from_raw_parts(self.data as *const u8, self.len))
-    }
+    }}
 }
 
 // If the assertion about Rust code being the only creator of rustls_str objects
@@ -305,7 +305,7 @@ pub struct rustls_slice_str<'a> {
 /// Return the length of the outer slice.
 ///
 /// If the input pointer is NULL, returns 0.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn rustls_slice_str_len(input: *const rustls_slice_str) -> size_t {
     unsafe {
         match input.as_ref() {
@@ -319,7 +319,7 @@ pub extern "C" fn rustls_slice_str_len(input: *const rustls_slice_str) -> size_t
 ///
 /// If the input pointer is NULL, or n is greater than the length of the
 /// rustls_slice_str, returns rustls_str{NULL, 0}.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn rustls_slice_str_get(input: *const rustls_slice_str, n: size_t) -> rustls_str {
     let input: &rustls_slice_str = unsafe {
         match input.as_ref() {

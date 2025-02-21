@@ -101,7 +101,7 @@ impl rustls_connection {
     /// Set the userdata pointer associated with this connection. This will be passed
     /// to any callbacks invoked by the connection, if you've set up callbacks in the config.
     /// The pointed-to data must outlive the connection.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_set_userdata(
         conn: *mut rustls_connection,
         userdata: *mut c_void,
@@ -112,7 +112,7 @@ impl rustls_connection {
     /// Set the logging callback for this connection. The log callback will be invoked
     /// with the userdata parameter previously set by rustls_connection_set_userdata, or
     /// NULL if no userdata was set.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_set_log_callback(
         conn: *mut rustls_connection,
         cb: rustls_log_callback,
@@ -132,7 +132,7 @@ impl rustls_connection {
     /// Returns 0 for success, or an errno value on error. Passes through return values
     /// from callback. See rustls_read_callback for more details.
     /// <https://docs.rs/rustls/latest/rustls/enum.Connection.html#method.read_tls>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_read_tls(
         conn: *mut rustls_connection,
         callback: rustls_read_callback,
@@ -169,7 +169,7 @@ impl rustls_connection {
     /// Returns 0 for success, or an errno value on error. Passes through return values
     /// from callback. See rustls_write_callback for more details.
     /// <https://docs.rs/rustls/latest/rustls/enum.Connection.html#method.write_tls>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_write_tls(
         conn: *mut rustls_connection,
         callback: rustls_write_callback,
@@ -206,7 +206,7 @@ impl rustls_connection {
     /// Returns 0 for success, or an errno value on error. Passes through return values
     /// from callback. See rustls_write_callback for more details.
     /// <https://docs.rs/rustls/latest/rustls/struct.Writer.html#method.write_vectored>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_write_tls_vectored(
         conn: *mut rustls_connection,
         callback: rustls_write_vectored_callback,
@@ -237,7 +237,7 @@ impl rustls_connection {
     /// into the internal plaintext buffer, potentially making bytes available
     /// for rustls_connection_read().
     /// <https://docs.rs/rustls/latest/rustls/enum.Connection.html#method.process_new_packets>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_process_new_packets(
         conn: *mut rustls_connection,
     ) -> rustls_result {
@@ -259,7 +259,7 @@ impl rustls_connection {
     }
 
     /// <https://docs.rs/rustls/latest/rustls/struct.CommonState.html#method.wants_read>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_wants_read(conn: *const rustls_connection) -> bool {
         ffi_panic_boundary! {
             try_ref_from_ptr!(conn).wants_read()
@@ -267,7 +267,7 @@ impl rustls_connection {
     }
 
     /// <https://docs.rs/rustls/latest/rustls/struct.CommonState.html#method.wants_write>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_wants_write(conn: *const rustls_connection) -> bool {
         ffi_panic_boundary! {
             try_ref_from_ptr!(conn).wants_write()
@@ -282,7 +282,7 @@ impl rustls_connection {
     /// See the rustls documentation for more information.
     ///
     /// <https://docs.rs/rustls/latest/rustls/struct.CommonState.html#method.is_handshaking>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_is_handshaking(conn: *const rustls_connection) -> bool {
         ffi_panic_boundary! {
             try_ref_from_ptr!(conn).is_handshaking()
@@ -290,7 +290,7 @@ impl rustls_connection {
     }
 
     /// Returns a `rustls_handshake_kind` describing the `rustls_connection`.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_handshake_kind(
         conn: *const rustls_connection,
     ) -> rustls_handshake_kind {
@@ -307,7 +307,7 @@ impl rustls_connection {
     /// is no limit. The limit can be set at any time, even if the current buffer
     /// use is higher.
     /// <https://docs.rs/rustls/latest/rustls/enum.Connection.html#method.set_buffer_limit>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_set_buffer_limit(conn: *mut rustls_connection, n: usize) {
         ffi_panic_boundary! {
             try_mut_from_ptr!(conn).set_buffer_limit(Some(n));
@@ -316,7 +316,7 @@ impl rustls_connection {
 
     /// Queues a close_notify fatal alert to be sent in the next write_tls call.
     /// <https://docs.rs/rustls/latest/rustls/enum.Connection.html#method.send_close_notify>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_send_close_notify(conn: *mut rustls_connection) {
         ffi_panic_boundary! {
             try_mut_from_ptr!(conn).send_close_notify();
@@ -330,7 +330,7 @@ impl rustls_connection {
     /// on occasions that merit its use.
     ///
     /// <https://docs.rs/rustls/latest/rustls/struct.ConnectionCommon.html#method.refresh_traffic_keys>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_refresh_traffic_keys(
         conn: *mut rustls_connection,
     ) -> rustls_result {
@@ -351,7 +351,7 @@ impl rustls_connection {
     /// first argument has type `struct rustls_connection *` (as opposed to
     ///  `const struct rustls_connection *`).
     /// <https://docs.rs/rustls/latest/rustls/enum.Connection.html#method.peer_certificates>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_get_peer_certificate<'a>(
         conn: *const rustls_connection,
         i: size_t,
@@ -378,7 +378,7 @@ impl rustls_connection {
     ///  `const struct rustls_connection *`).
     /// <https://www.iana.org/assignments/tls-parameters/>
     /// <https://docs.rs/rustls/latest/rustls/enum.Connection.html#method.alpn_protocol>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_get_alpn_protocol(
         conn: *const rustls_connection,
         protocol_out: *mut *const u8,
@@ -407,7 +407,7 @@ impl rustls_connection {
     /// the u16 version number as defined in the relevant RFC is returned.
     /// <https://docs.rs/rustls/latest/rustls/enum.Connection.html#method.protocol_version>
     /// <https://docs.rs/rustls/latest/rustls/internal/msgs/enums/enum.ProtocolVersion.html>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_get_protocol_version(
         conn: *const rustls_connection,
     ) -> u16 {
@@ -424,7 +424,7 @@ impl rustls_connection {
     /// This returns `TLS_NULL_WITH_NULL_NULL` (0x0000) until the ciphersuite is agreed.
     ///
     /// [IANA]: <https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-4>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_get_negotiated_ciphersuite(
         conn: *const rustls_connection,
     ) -> u16 {
@@ -444,7 +444,7 @@ impl rustls_connection {
     /// need to be freed.
     ///
     /// <https://docs.rs/rustls/latest/rustls/enum.Connection.html#method.negotiated_cipher_suite>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_get_negotiated_ciphersuite_name(
         conn: *const rustls_connection,
     ) -> rustls_str<'static> {
@@ -461,7 +461,7 @@ impl rustls_connection {
     /// This returns Reserved (0x0000) until the key exchange group is agreed.
     ///
     /// [IANA]: <https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-8>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_get_negotiated_key_exchange_group(
         conn: *const rustls_connection,
     ) -> u16 {
@@ -479,7 +479,7 @@ impl rustls_connection {
     ///
     /// The lifetime of the `rustls_str` is the lifetime of the program, it does not
     /// need to be freed.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_get_negotiated_key_exchange_group_name(
         conn: *const rustls_connection,
     ) -> rustls_str<'static> {
@@ -497,7 +497,7 @@ impl rustls_connection {
     /// On success, store the number of bytes actually written in *out_n
     /// (this may be less than `count`).
     /// <https://docs.rs/rustls/latest/rustls/struct.Writer.html#method.write>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_write(
         conn: *mut rustls_connection,
         buf: *const u8,
@@ -533,7 +533,7 @@ impl rustls_connection {
     /// Rust-internal reasons). Initializing a buffer once and then using it
     /// multiple times without zeroizing before each call is fine.
     /// <https://docs.rs/rustls/latest/rustls/struct.Reader.html#method.read>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_read(
         conn: *mut rustls_connection,
         buf: *mut u8,
@@ -621,7 +621,7 @@ impl rustls_connection {
     /// This is different from `rustls_crypto_provider_fips` which is concerned
     /// only with cryptography, whereas this also covers TLS-level configuration that NIST
     /// recommends, as well as ECH HPKE suites if applicable.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_fips(conn: *const rustls_connection) -> bool {
         ffi_panic_boundary! {
             let conn = try_ref_from_ptr!(conn);
@@ -634,7 +634,7 @@ impl rustls_connection {
 
     /// Free a rustls_connection. Calling with NULL is fine.
     /// Must not be called twice with the same value.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_connection_free(conn: *mut rustls_connection) {
         ffi_panic_boundary! {
             free_box(conn);

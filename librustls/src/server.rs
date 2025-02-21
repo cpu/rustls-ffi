@@ -77,7 +77,7 @@ impl rustls_server_config_builder {
     ///
     /// This uses the process default provider's values for the cipher suites and key exchange
     /// groups, as well as safe defaults for protocol versions.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_config_builder_new() -> *mut rustls_server_config_builder {
         ffi_panic_boundary! {
             let builder = ServerConfigBuilder {
@@ -114,7 +114,7 @@ impl rustls_server_config_builder {
     ///
     /// Ciphersuites are configured separately via the crypto provider. See
     /// `rustls_crypto_provider_builder_set_cipher_suites` for more information.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_config_builder_new_custom(
         provider: *const rustls_crypto_provider,
         tls_versions: *const u16,
@@ -154,7 +154,7 @@ impl rustls_server_config_builder {
     /// certificates.
     ///
     /// This increases the refcount of `verifier` and doesn't take ownership.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_config_builder_set_client_verifier(
         builder: *mut rustls_server_config_builder,
         verifier: *const rustls_client_cert_verifier,
@@ -177,7 +177,7 @@ impl rustls_server_config_builder {
     ///
     /// For more control over which secrets are logged, or to customize the format, prefer
     /// `rustls_server_config_builder_set_key_log`.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_config_builder_set_key_log_file(
         builder: *mut rustls_server_config_builder,
     ) -> rustls_result {
@@ -209,7 +209,7 @@ impl rustls_server_config_builder {
     ///
     /// See also `rustls_server_config_builder_set_key_log_file` for a simpler way to log
     /// to a file specified by the `SSLKEYLOGFILE` environment variable.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_config_builder_set_key_log(
         builder: *mut rustls_server_config_builder,
         log_cb: rustls_keylog_log_callback,
@@ -238,7 +238,7 @@ impl rustls_server_config_builder {
     ///
     /// Use free only when the building of a config has to be aborted before a config
     /// was created.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_config_builder_free(config: *mut rustls_server_config_builder) {
         ffi_panic_boundary! {
             free_box(config);
@@ -249,7 +249,7 @@ impl rustls_server_config_builder {
     /// suites, aka preference, during handshake and respect its own ordering
     /// as configured.
     /// <https://docs.rs/rustls/latest/rustls/struct.ServerConfig.html#structfield.ignore_client_order>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_config_builder_set_ignore_client_order(
         builder: *mut rustls_server_config_builder,
         ignore: bool,
@@ -272,7 +272,7 @@ impl rustls_server_config_builder {
     /// any pointers, so the caller can free the pointed-to memory after calling.
     ///
     /// <https://docs.rs/rustls/latest/rustls/server/struct.ServerConfig.html#structfield.alpn_protocols>
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_config_builder_set_alpn_protocols(
         builder: *mut rustls_server_config_builder,
         protocols: *const rustls_slice_bytes,
@@ -306,7 +306,7 @@ impl rustls_server_config_builder {
     ///
     /// EXPERIMENTAL: installing a client_hello callback will replace any
     /// configured certified keys and vice versa.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_config_builder_set_certified_keys(
         builder: *mut rustls_server_config_builder,
         certified_keys: *const *const rustls_certified_key,
@@ -332,7 +332,7 @@ impl rustls_server_config_builder {
     /// This function may return an error if no process default crypto provider has been set
     /// and the builder was constructed using `rustls_server_config_builder_new`, or if no
     /// certificate resolver was set.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_config_builder_build(
         builder: *mut rustls_server_config_builder,
         config_out: *mut *const rustls_server_config,
@@ -354,11 +354,11 @@ impl rustls_server_config_builder {
             }
             .with_client_cert_verifier(builder.verifier);
 
-            let mut config = if let Some(r) = builder.cert_resolver {
+            let mut config = match builder.cert_resolver { Some(r) => {
                 base.with_cert_resolver(r)
-            } else {
+            } _ => {
                 return rustls_result::NoCertResolver;
-            };
+            }};
             if let Some(ss) = builder.session_storage {
                 config.session_storage = ss;
             }
@@ -384,7 +384,7 @@ impl rustls_server_config {
     /// This is different from `rustls_crypto_provider_fips` which is concerned
     /// only with cryptography, whereas this also covers TLS-level configuration that NIST
     /// recommends, as well as ECH HPKE suites if applicable.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_config_fips(config: *const rustls_server_config) -> bool {
         ffi_panic_boundary! {
             try_ref_from_ptr!(config).fips()
@@ -399,7 +399,7 @@ impl rustls_server_config {
     /// hold an internal reference to the Rust object. However, C code must
     /// consider this pointer unusable after "free"ing it.
     /// Calling with NULL is fine. Must not be called twice with the same value.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_config_free(config: *const rustls_server_config) {
         ffi_panic_boundary! {
             free_arc(config);
@@ -417,7 +417,7 @@ impl rustls_server_config {
     ///
     /// The caller now owns the rustls_connection and must call `rustls_connection_free` when
     /// done with it.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_connection_new(
         config: *const rustls_server_config,
         conn_out: *mut *mut rustls_connection,
@@ -457,7 +457,7 @@ impl rustls_server_config {
 /// - the connection is a server connection but the SNI extension in the client hello has not
 ///   been processed during the handshake yet. Check `rustls_connection_is_handshaking`.
 /// - the SNI value contains null bytes.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn rustls_server_connection_get_server_name(
     conn: *const rustls_connection,
 ) -> rustls_str<'static> {
@@ -649,7 +649,7 @@ impl rustls_server_config_builder {
     /// the rustls library is re-evaluating their current approach to client hello handling.
     /// Installing a client_hello callback will replace any configured certified keys
     /// and vice versa. Same holds true for the set_certified_keys variant.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_config_builder_set_hello_callback(
         builder: *mut rustls_server_config_builder,
         callback: rustls_client_hello_callback,
@@ -686,7 +686,7 @@ fn sigschemes(input: &[u16]) -> Vec<SignatureScheme> {
 ///
 /// Return RUSTLS_RESULT_OK if a key was selected and RUSTLS_RESULT_NOT_FOUND
 /// if none was suitable.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn rustls_client_hello_select_certified_key(
     hello: *const rustls_client_hello,
     certified_keys: *const *const rustls_certified_key,
@@ -727,7 +727,7 @@ impl rustls_server_config_builder {
     /// If `userdata` has been set with rustls_connection_set_userdata, it
     /// will be passed to the callbacks. Otherwise the userdata param passed to
     /// the callbacks will be NULL.
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn rustls_server_config_builder_set_persistence(
         builder: *mut rustls_server_config_builder,
         get_cb: rustls_session_store_get_callback,

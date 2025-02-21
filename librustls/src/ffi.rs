@@ -466,7 +466,7 @@ macro_rules! try_box_from_ptr {
 pub(crate) use try_box_from_ptr;
 
 macro_rules! try_slice {
-    ( $ptr:expr, $count:expr ) => {
+    ( $ptr:expr_2021, $count:expr_2021 ) => {
         if $ptr.is_null() {
             return $crate::panic::NullParameterOrDefault::value();
         } else {
@@ -478,7 +478,7 @@ macro_rules! try_slice {
 pub(crate) use try_slice;
 
 macro_rules! try_slice_mut {
-    ( $ptr:expr, $count:expr ) => {
+    ( $ptr:expr_2021, $count:expr_2021 ) => {
         if $ptr.is_null() {
             return $crate::panic::NullParameterOrDefault::value();
         } else {
