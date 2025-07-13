@@ -6,8 +6,9 @@ permissions:
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: ['main', 'rel-*', 'ci/*']
+  pull_request:
+  merge_group:
   schedule:
     - cron: '0 18 * * *'
 
@@ -44,13 +45,14 @@ jobs:
 
       - name: Package and upload artifact
         uses: actions/upload-pages-artifact@v3
+        if: github.ref == 'refs/heads/main'
         with:
           path: ./target/website/
 
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    if: github.repository == 'rustls/rustls-ffi'
+    if: github.repository == 'rustls/rustls-ffi' && github.ref == 'refs/heads/main'
     needs: generate
     permissions:
       pages: write
