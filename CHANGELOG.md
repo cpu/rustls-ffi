@@ -2,22 +2,89 @@
 
 ## 0.15.1 (2026-03-13)
 
-This is a minor release, updating rustls to 0.23.37 and updating other dependencies.
+This is a minor release with one security fix, updating rustls to 0.23.37,
+rustls-webpki to 0.103.10 and improving documentation tooling.
 
-* Build artifacts on ubuntu-22 by @ctz in https://github.com/rustls/rustls-ffi/pull/561
-* rustls 0.23.25 -> 0.23.27 by @cpu in https://github.com/rustls/rustls-ffi/pull/566
-* Update rustls 0.23.27 -> 0.23.28, expose new API surface & errors by @cpu in https://github.com/rustls/rustls-ffi/pull/574
-* website: Remove backdrop-filter: blur from items by @yedayak in https://github.com/rustls/rustls-ffi/pull/577
-* docgen: skip over cpp attributes before decl by @ctz in https://github.com/rustls/rustls-ffi/pull/581
-* cbindgen: Add version defines by @yedayak in https://github.com/rustls/rustls-ffi/pull/576
-* librustls: rustls 0.23.28 -> 0.23.29 by @cpu in https://github.com/rustls/rustls-ffi/pull/583
-* librustls: update rustls 0.23.29 -> 0.23.31 by @cpu in https://github.com/rustls/rustls-ffi/pull/589
-* Bump rust-version to 1.73 by @djc in https://github.com/rustls/rustls-ffi/pull/607
-* upgrade rustls 0.23.31 -> 0.23.33 by @cpu in https://github.com/rustls/rustls-ffi/pull/614
-* error: use decl+proc macro to generate u32 mapping  by @ctz in https://github.com/rustls/rustls-ffi/pull/618
-* librustls: fix typo in server cert verifier builder docs by @cpu in https://github.com/rustls/rustls-ffi/pull/620
-* Bump macos versions for artifacts by @ctz in https://github.com/rustls/rustls-ffi/pull/623
-* docgen/website: show deprecated function warnings on docs website by @cpu in https://github.com/rustls/rustls-ffi/pull/584
+### Security
+
+Updates rustls-webpki to 0.103.10:
+
+This update addresses RUSTSEC-2026-0049; a security issue affecting CRL
+revocation checking.
+
+This low-impact vulnerability affects users of the
+`rustls_web_pki_[server|client]_cert_verifier_builder` APIs that populated CRLs
+with `rustls_web_pki_server_cert_verifier_builder_add_crl`. If a certificate
+signed by a trusted certificate authority contained multiple CRL distribution
+points, only the first was checked against the CRL's issuing distribution point.
+
+In a default configuration this oversight meant that revocation checking would
+fail-closed with an incorrect, but safe, `RUSTLS_RESULT_CERT_UNKNOWN_ISSUER`
+error.
+
+If configured with
+`rustls_web_pki_client_cert_verifier_allow_unknown_revocatio_status`, then
+revocation checking would fail-open, potentially allowing use of certificate
+revoked by the CRL.
+
+Inducing this bug requires a trusted certificate issuer to be compromised, which
+can result in more serious revocation bypasses and security issues.
+
+### Added
+
+* Version detection macros in the C header
+  (https://github.com/rustls/rustls-ffi/pull/576): 
+  * `RUSTLS_VERSION_MAJOR`, `RUSTLS_VERSION_MINOR`, `RUSTLS_VERSION_PATCH`
+    individual version components as integers.
+  * `RUSTLS_VERSION_NUMBER` - a single number encoding the version as
+    `(major << 16 | minor << 8 | patch)`.
+
+* New error variants (https://github.com/rustls/rustls-ffi/pull/574):
+  * `RUSTLS_RESULT_CERT_REVOCATION_LIST_UNSUPPORTED_SIGNATURE_ALGORITHM` - for
+    CRL signature algorithm errors.
+  * `RUSTLS_RESULT_CERT_UNSUPPORTED_SIGNATURE_ALGORITHM` - for certificate
+    signature algorithm errors.
+
+* `rustls_platform_server_cert_verifier_try_with_provider()`
+  (https://github.com/rustls/rustls-ffi/pull/574):
+  * A safer alternative to `rustls_platform_server_cert_verifier_with_provider`
+    with better error reporting. The older function is now deprecated.
+
+* `rustls_connection_get_tls13_tickets_received()`
+  (https://github.com/rustls/rustls-ffi/pull/574):
+  * Returns the number of TLS 1.3 tickets received by a client connection. This
+    is FFI for the Rustls `ClientConnection::tls13_tickets_received()` API.
+
+* `rustls_client_connection_new_alpn()`
+  (https://github.com/rustls/rustls-ffi/pull/566):
+  * constructs a client `rustls_connection` with custom ALPN protocol support
+    that differs from the base `rustls_client_config`.
+
+### Deprecated
+
+* Deprecated functions are now visually annotated on the documentation website
+  (https://github.com/rustls/rustls-ffi/pull/584).
+
+* Updated rustls-platform-verifier from 0.5.3 to 0.6.2
+  (https://github.com/rustls/rustls-ffi/pull/579).
+  * Platform server cert verifier creation is now fallible and must be handled
+    appropriately.
+  * `rustls_platform_server_cert_verifier_with_provider()` is now deprecated in
+    favor of `rustls_platform_server_cert_verifier_try_with_provider()`.
+
+### Changed
+
+* Updated rustls from 0.23.31 to 0.23.37.
+
+* Post-quantum key exchange (`X25519MLKEM768`) is now preferred by default
+  matching upstream rustls (https://github.com/rustls/rustls-ffi/pull/566)
+
+* An additional field is now exposed in `rustls_client_hello`
+  (https://github.com/rustls/rustls-ffi/pull/574):
+  * `named_groups` - the supported key exchange groups advertised by the client.
+  * This is a breaking change, but limited to the server-side
+    `rustls_server_config_builder_set_hello_callback` APIs documented as
+    **experimental**.
 
 ## 0.15.0 (2025-03-25)
 
