@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.15.4 (2026-09-25)
+
+This is a minor release with one security fix. It also updates `rustls` to
+[0.23.45](https://github.com/rustls/rustls/releases/tag/v%2F0.23.39).
+
+### Security
+
+This update addresses
+[GHSA-2mjx-qc3c-rqvc](https://github.com/rustls/rustls/security/advisories/GHSA-2mjx-qc3c-rqvc),
+a security issue affecting TLS 1.3 handshake message processing that could allow
+a broken peer to send plaintext handshake messages where an encrypted one is
+expected without rustls rejecting the connection.
+
 ## 0.15.3 (2026-04-22)
 
 This is a minor release with one security fix. It also updates `rustls` to
